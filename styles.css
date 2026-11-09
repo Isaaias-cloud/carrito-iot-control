@@ -1,0 +1,303 @@
+:root {
+  --bg-app: #07111f;
+  --panel-bg: rgba(15, 23, 42, 0.75);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --accent-blue: #2563eb;
+  --accent-cyan: #06b6d4;
+  --accent-red: #dc2626;
+  --accent-amber: #f59e0b;
+  --accent-green: #10b981;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --radius-gamepad: 16px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Garantiza cero scroll en móvil */
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.gamepad-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh; /* Adapta a la altura real del puerto de visión móvil */
+  max-height: 100dvh;
+  padding: 0.5rem;
+  gap: 0.5rem;
+}
+
+/* Header compacto */
+.gamepad-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.4rem 0.75rem;
+  flex-shrink: 0;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand-mark {
+  color: var(--accent-cyan);
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.app-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.eyebrow {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.status-strip {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.status-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.status-pill--checking { background-color: var(--accent-amber); color: #000; }
+.status-pill--online { background-color: var(--accent-green); color: #000; }
+.status-pill--offline { background-color: var(--accent-red); color: #fff; }
+.status-pill--unknown { background-color: #475569; color: #fff; }
+
+/* Contenedor principal estilo Gamepad */
+.gamepad-shell {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1.1fr 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-gamepad);
+  padding: 0.5rem;
+  min-height: 0; /* Previene desbordamiento en CSS Grid */
+}
+
+/* Zonas de Joystick */
+.joystick-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 0.25rem;
+}
+
+.zone-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: var(--accent-cyan);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.joystick {
+  position: relative;
+  width: min(34vw, 150px);
+  height: min(34vw, 150px);
+  background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+  border: 2px solid var(--panel-border);
+  border-radius: 50%;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+.joystick-ring {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.joystick-axis {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.05);
+}
+.joystick-axis--horizontal { top: 50%; left: 10%; right: 10%; height: 2px; transform: translateY(-50%); }
+.joystick-axis--vertical { left: 50%; top: 10%; bottom: 10%; width: 2px; transform: translateX(-50%); }
+
+.joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  margin-left: -22px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border: 2px solid #60a5fa;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+
+.joystick-zone--right .joystick-knob {
+  background: linear-gradient(135deg, #06b6d4 0%, #0e7490 100%);
+  border-color: #67e8f9;
+}
+
+.joystick-arrow {
+  position: absolute;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.joystick-arrow--up { top: 4px; left: 50%; transform: translateX(-50%); }
+.joystick-arrow--down { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.joystick-arrow--left { left: 4px; top: 50%; transform: translateY(-50%); }
+.joystick-arrow--right { right: 4px; top: 50%; transform: translateY(-50%); }
+
+.joystick-readout {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Zona Central de Botones */
+.center-zone {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.6rem;
+  height: 100%;
+}
+
+.center-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.btn-gamepad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 0.4rem 0.25rem;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.btn-gamepad:active {
+  transform: scale(0.96);
+}
+
+.btn-icon { font-size: 1rem; }
+.btn-label { font-size: 0.65rem; font-weight: 600; margin-top: 0.1rem; }
+
+.btn-gamepad--sound:hover { border-color: #38bdf8; }
+.btn-gamepad--speed:hover { border-color: var(--accent-amber); }
+.btn-gamepad--light:hover { border-color: #fde047; }
+.btn-gamepad--off { background: rgba(220, 38, 38, 0.2); border-color: rgba(220, 38, 38, 0.5); }
+.btn-gamepad--off:hover { background: rgba(220, 38, 38, 0.4); }
+
+.stop-button {
+  width: 100%;
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  border: 1px solid #f87171;
+  border-radius: 10px;
+  padding: 0.5rem;
+  color: white;
+  font-weight: 800;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.3);
+  cursor: pointer;
+}
+
+.stop-button:active {
+  transform: scale(0.97);
+}
+
+/* Footer compacto */
+.gamepad-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.telemetry-compact {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70%;
+}
+
+.telemetry-value {
+  color: var(--text-main);
+  font-family: monospace;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent-blue);
+  color: white;
+  padding: 8px;
+  z-index: 100;
+}
+.skip-link:focus { top: 0; }
+
+/* Ajuste portrait en móviles verticales muy estrechos */
+@media (max-aspect-ratio: 1/1) and (max-width: 500px) {
+  .gamepad-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    overflow-y: auto;
+  }
+  .joystick {
+    width: min(40vw, 130px);
+    height: min(40vw, 130px);
+  }
+}
