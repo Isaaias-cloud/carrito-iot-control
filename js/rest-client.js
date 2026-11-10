@@ -1,6 +1,22 @@
 import { APP_CONFIG } from './config.js';
 import { isRecord } from './utils.js';
 
+export async function fetchWithTimeout(url, { timeoutMs = APP_CONFIG.requestTimeoutMs, signal, ...options } = {}) {
+  const controller = new AbortController();
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+  const abortForwarder = () => controller.abort();
+
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener('abort', abortForwarder, { once: true });
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    globalThis.clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abortForwarder);
+  }
+}
+
 export class ApiError extends Error {
   constructor(message, { status = 0, details = null, cause = null } = {}) {
     super(message);
@@ -18,17 +34,13 @@ export class RestClient {
   }
 
   async request(path, { method = 'GET', body, signal } = {}) {
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), this.timeoutMs);
-    const abortForwarder = () => controller.abort();
-    signal?.addEventListener('abort', abortForwarder, { once: true });
-
     try {
-      const response = await fetch(`${this.baseUrl}${path}`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}${path}`, {
         method,
         headers: body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: controller.signal,
+        signal,
+        timeoutMs: this.timeoutMs,
         mode: 'cors',
         credentials: 'omit',
       });
@@ -43,10 +55,11 @@ export class RestClient {
         throw new ApiError('La solicitud tardó demasiado o fue cancelada.', { cause: error });
       }
       throw new ApiError('No se pudo contactar al servidor. Revisa la red y CORS del origen de GitHub Pages.', { cause: error });
-    } finally {
-      window.clearTimeout(timeoutId);
-      signal?.removeEventListener('abort', abortForwarder);
     }
+  }
+
+  async checkRdsHealth() {
+    return this.request('/health/db');
   }
 
   async parseResponse(response) {

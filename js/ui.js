@@ -67,6 +67,21 @@ export class ControlUI {
     pill.setAttribute('aria-label', `${name.toUpperCase()}: ${detail || label}`);
   }
 
+  updateRdsStatus(status, detail = '') {
+    const normalizedState = STATUS_CLASSES.has(status) ? status : 'unknown';
+    const labels = {
+      online: 'RDS OK',
+      offline: 'RDS OFF',
+      checking: 'RDS…',
+      unknown: 'RDS ?',
+    };
+    this.setStatus('rds', {
+      state: normalizedState,
+      label: labels[normalizedState],
+      detail: safeText(detail, labels[normalizedState]),
+    });
+  }
+
   setActionButtonsDisabled(disabled) {
     this.actionsDisabled = Boolean(disabled);
     Object.values(this.actionButtons).forEach((button) => {

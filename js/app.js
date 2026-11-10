@@ -247,6 +247,16 @@ async function checkApiAndLoadData() {
   }
 }
 
+async function checkRdsHealth() {
+  ui.updateRdsStatus('checking', 'Consultando GET /health/db…');
+  try {
+    await api.checkRdsHealth();
+    ui.updateRdsStatus('online', 'Base de datos RDS disponible.');
+  } catch (error) {
+    ui.updateRdsStatus('offline', error?.message || 'No se pudo verificar la base de datos RDS.');
+  }
+}
+
 function handleWsState({ state, detail }) {
   const states = {
     online: { state: 'online', label: 'WSS OK' },
@@ -276,7 +286,7 @@ ui.setIdentity({ id: APP_CONFIG.vehicleId, studentName: APP_CONFIG.studentName }
 ui.setActionButtonsDisabled(true);
 ui.setStatus('ws', { state: 'checking', label: 'WSS…', detail: 'Abriendo sesión WSS real…' });
 ui.setStatus('api', { state: 'checking', label: 'API…', detail: 'Comprobando API…' });
-ui.setStatus('rds', { state: 'unknown', label: 'RDS ?', detail: 'Sin diagnóstico público en la API' });
 setupControls();
 startWebSocket();
-checkApiAndLoadData();
+void checkRdsHealth();
+void checkApiAndLoadData();
