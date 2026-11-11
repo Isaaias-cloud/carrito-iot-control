@@ -47,22 +47,24 @@ app.js ──────────────── websocket-service.js ─
 ```text
 front-end/
 ├── index.html
-├── styles.css
-├── favicon.svg
 ├── README.md
-└── js/
-    ├── app.js               # Orquestación, eventos y estados de la pantalla
-    ├── config.js            # URLs, vehículo, timeouts y nombre del alumno
-    ├── domain.js             # Reglas de dominio y catálogo remoto
-    ├── rest-client.js        # Cliente Fetch modular
-    ├── ui.js                 # Render y accesibilidad de la interfaz
-    ├── utils.js              # Validaciones y utilidades seguras
-    └── websocket-service.js  # Apertura, reconexión y eventos WSS
+└── assets/
+    ├── favicon.svg
+    ├── css/
+    │   └── styles.css
+    └── js/
+        ├── app.js               # Orquestación, eventos y estados de la pantalla
+        ├── config.js            # URLs, vehículo, timeouts y nombre del alumno
+        ├── domain.js            # Reglas de dominio y catálogo remoto
+        ├── rest-client.js       # Cliente Fetch modular
+        ├── ui.js                # Render y accesibilidad de la interfaz
+        ├── utils.js             # Validaciones y utilidades seguras
+        └── websocket-service.js # Apertura, reconexión y eventos WSS
 ```
 
 ## Configuración
 
-Edita solo `js/config.js` para cambiar el vehículo o el crédito del footer:
+Edita solo `assets/js/config.js` para cambiar el vehículo o el crédito del footer:
 
 ```js
 studentName: 'Nombre completo real del alumno'
@@ -86,11 +88,11 @@ En una comprobación de solo lectura del 9 de noviembre de 2026, el preflight de
 
 ## Publicación en GitHub Pages
 
-1. Crea un repositorio y copia estos archivos conservando la carpeta `js/`.
-2. Reemplaza `studentName` en `js/config.js`.
+1. Crea un repositorio y copia estos archivos conservando la carpeta `assets/`.
+2. Reemplaza `studentName` en `assets/js/config.js`.
 3. Verifica localmente los módulos y la consola del navegador.
 4. Publica la rama o carpeta seleccionada desde **Settings → Pages**.
-5. Abre la URL HTTPS de Pages y confirma que cargan `favicon.svg`, `styles.css` y `js/app.js` bajo la subruta.
+5. Abre la URL HTTPS de Pages y confirma que cargan `assets/favicon.svg`, `assets/css/styles.css` y `assets/js/app.js` bajo la subruta.
 6. Solicita al backend CORS para esa URL, si todavía no está autorizado.
 7. Comprueba que WSS conecta y que no se intenta abrir ningún recurso `http://`.
 
@@ -153,7 +155,7 @@ Un HTTP 2xx y un evento WSS solo prueban aceptación/publicación en el backend;
 - [x] Indicadores separados para WSS, API y RDS; RDS permanece «Sin verificar» sin diagnóstico real.
 - [x] Favicon propio y footer responsivo con crédito configurable.
 - [ ] Confirmar en el backend CORS, métodos autorizados y origen exacto de GitHub Pages.
-- [ ] Sustituir `[Nombre completo del alumno]` en `js/config.js`.
+- [ ] Sustituir `[Nombre completo del alumno]` en `assets/js/config.js`.
 - [ ] Ejecutar la prueba WSS independiente y validar comportamiento físico cuando el hardware esté conectado.
 
 ## Commits sugeridos

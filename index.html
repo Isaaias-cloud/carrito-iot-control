@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#07111f" />
     <meta name="description" content="Panel de control dual para el vehículo IoT" />
     <title>Control · Vehículo IoT</title>
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
@@ -14,7 +14,7 @@
       integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
       crossorigin="anonymous"
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./assets/css/styles.css" />
   </head>
   <body class="gamepad-body">
     <a class="skip-link" href="#main-content">Saltar al contenido</a>
@@ -87,6 +87,18 @@
             </button>
           </div>
 
+          <!-- Control compacto de DEMO -->
+          <div class="demo-wrapper" id="demo-wrapper">
+            <label for="demo-select" class="visually-hidden">Seleccionar DEMO</label>
+            <select class="form-select form-select-sm demo-select" id="demo-select" disabled>
+              <option value="">Cargando DEMOs...</option>
+            </select>
+            <button class="btn-gamepad btn-gamepad--demo" id="btn-run-demo" type="button" disabled title="Ejecutar DEMO seleccionada">
+              <span aria-hidden="true">▶</span>
+              <span class="btn-label-inline">Ejecutar</span>
+            </button>
+          </div>
+
           <!-- Botón de Paro General (Centro inferior) -->
           <button class="stop-button" id="stop-button" type="button" aria-label="Solicitar detener inmediatamente">
             <span class="stop-button__icon" aria-hidden="true">■</span>
@@ -134,6 +146,6 @@
     <!-- Región de notificaciones / mensajes emergentes -->
     <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./js/app.js"></script>
+    <script type="module" src="./assets/js/app.js"></script>
   </body>
 </html>

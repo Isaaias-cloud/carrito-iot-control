@@ -62,6 +62,17 @@ export class RestClient {
     return this.request('/health/db');
   }
 
+  async getDemos(vehicleId) {
+    return this.request(`/demos/vehiculo/${encodeURIComponent(Number(vehicleId))}`);
+  }
+
+  async executeDemo(payload) {
+    return this.request('/demos/ejecutar', {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
   async parseResponse(response) {
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) return null;

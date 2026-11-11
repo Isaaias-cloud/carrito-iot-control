@@ -76,3 +76,11 @@ export function getStopCommand(index) {
 export function commandPayload(command, connected, origin = 'MANUAL') {
   return { id_comando: Number(command.id_comando), conectado: Boolean(connected), origen: origin };
 }
+
+export function validateDemoPayload(demoId, vehicleId) {
+  const normalizedDemoId = Number(demoId);
+  const normalizedVehicleId = Number(vehicleId);
+  assertPositiveInteger(normalizedDemoId, 'El ID de la DEMO');
+  assertPositiveInteger(normalizedVehicleId, 'El ID del vehículo');
+  return { id_demo: normalizedDemoId, id_vehiculo: normalizedVehicleId };
+}

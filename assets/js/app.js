@@ -2,7 +2,7 @@ import { APP_CONFIG, ENDPOINTS } from './config.js';
 import { ApiError, RestClient, validateCommandList, validateHealth } from './rest-client.js';
 import { VehicleWebSocket } from './websocket-service.js';
 import { ControlUI } from './ui.js';
-import { commandForCenterAction, commandForJoystickDirection, commandPayload, getStopCommand, indexActiveCommands } from './domain.js';
+import { commandForCenterAction, commandForJoystickDirection, commandPayload, getStopCommand, indexActiveCommands, validateDemoPayload } from './domain.js';
 import { isRecord, safeText } from './utils.js';
 
 const api = new RestClient({ baseUrl: APP_CONFIG.apiBaseUrl });
@@ -12,6 +12,7 @@ let vehicleState = { conectado: true };
 let activeRequest = null;
 let pendingCommand = null;
 let lastCompletedCommand = { id: null, at: 0 };
+let demoExecuting = false;
 
 const joystickState = {
   left: { pointerId: null, direction: 'neutral' },
@@ -115,6 +116,45 @@ async function stopVehicle() {
   return handleCommandExecution(getStopCommand(commandIndex), { isStop: true });
 }
 
+async function runSelectedDemo() {
+  if (demoExecuting) return;
+  const demoId = ui.demoSelect?.value;
+  if (!demoId) {
+    ui.toast('Selecciona una DEMO antes de ejecutarla.', 'error');
+    return;
+  }
+
+  let payload;
+  try {
+    payload = validateDemoPayload(demoId, APP_CONFIG.vehicleId);
+  } catch (error) {
+    ui.toast(error.message || 'La DEMO seleccionada no es válida.', 'error');
+    return;
+  }
+
+  demoExecuting = true;
+  const selectedOption = ui.demoSelect?.selectedOptions?.[0];
+  const demoLabel = safeText(selectedOption?.textContent, `DEMO #${payload.id_demo}`);
+  ui.setDemoExecuting(true, `Ejecutando ${demoLabel}`);
+
+  try {
+    const response = await api.executeDemo(payload);
+    const details = [];
+    if (isRecord(response) && response.total_movimientos !== undefined) {
+      details.push(`total de movimientos: ${safeText(response.total_movimientos)}`);
+    }
+    if (isRecord(response) && response.movimientos_ejecutados !== undefined) {
+      details.push(`ejecutados: ${safeText(response.movimientos_ejecutados)}`);
+    }
+    ui.toast(`${demoLabel} aceptada por la API${details.length ? ` · ${details.join(' · ')}` : '.'}`, 'success');
+  } catch (error) {
+    ui.toast(error?.message || 'No se pudo ejecutar la DEMO.', 'error');
+  } finally {
+    demoExecuting = false;
+    ui.setDemoExecuting(false, 'La DEMO terminó o no pudo ejecutarse.');
+  }
+}
+
 async function applyJoystickDirection(joystick, direction) {
   const state = joystickState[joystick];
   if (state.direction === direction) return;
@@ -207,6 +247,8 @@ function setupControls() {
   setupPointerJoystick('right');
   setupKeyboard();
   ui.stopButton?.addEventListener('click', () => stopVehicle());
+  ui.demoSelect?.addEventListener('change', () => ui.setDemoSelectionReady(Boolean(ui.demoSelect.value)));
+  ui.runDemoButton?.addEventListener('click', () => { void runSelectedDemo(); });
   Object.entries(ui.actionButtons).forEach(([action, button]) => {
     button?.addEventListener('click', () => handleCommandExecution(commandForCenterAction(commandIndex, action), { button }));
   });
@@ -215,10 +257,11 @@ function setupControls() {
 }
 
 async function loadVehicleData() {
-  const [vehicleResult, commandsResult, stateResult] = await Promise.allSettled([
+  const [vehicleResult, commandsResult, stateResult, demosResult] = await Promise.allSettled([
     api.request(ENDPOINTS.vehicle(APP_CONFIG.vehicleId)),
     api.request(ENDPOINTS.commands(APP_CONFIG.vehicleId)),
     api.request(ENDPOINTS.state(APP_CONFIG.vehicleId)),
+    api.getDemos(APP_CONFIG.vehicleId),
   ]);
   if (vehicleResult.status === 'fulfilled' && isRecord(vehicleResult.value)) {
     ui.setIdentity({ name: vehicleResult.value.nombre, id: vehicleResult.value.id_vehiculo, studentName: APP_CONFIG.studentName });
@@ -232,6 +275,12 @@ async function loadVehicleData() {
     ui.toast('No se pudo cargar el catálogo de comandos.', 'error');
   }
   if (stateResult.status === 'fulfilled' && isRecord(stateResult.value)) vehicleState = stateResult.value;
+  if (demosResult.status === 'fulfilled' && Array.isArray(demosResult.value)) {
+    if (ui.renderDemoOptions(demosResult.value) === 0) ui.toast('No hay DEMOs disponibles para este vehículo.', 'info');
+  } else {
+    ui.renderDemoOptions([]);
+    ui.toast('No se pudo cargar el catálogo de DEMOs.', 'error');
+  }
 }
 
 async function checkApiAndLoadData() {
