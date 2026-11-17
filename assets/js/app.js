@@ -1,18 +1,23 @@
 import { APP_CONFIG, ENDPOINTS } from './config.js';
-import { ApiError, RestClient, validateCommandList, validateHealth } from './rest-client.js';
-import { VehicleWebSocket } from './websocket-service.js';
+import { ApiError, RestClient, validateCommandList } from './rest-client.js';
 import { ControlUI } from './ui.js';
 import { commandForCenterAction, commandForJoystickDirection, commandPayload, getStopCommand, indexActiveCommands, validateDemoPayload } from './domain.js';
 import { isRecord, safeText } from './utils.js';
+import { checkApiHealth, checkRdsHealth, startConnectivityMonitor } from './connectivity.js';
+import { NavigationController } from './navigation.js';
+import { MonitoringController } from './monitoring.js';
+import { vehicleSession } from './vehicle-session.js';
 
 const api = new RestClient({ baseUrl: APP_CONFIG.apiBaseUrl });
 const ui = new ControlUI();
+const ACTION_PULSE_MS = 500;
 let commandIndex = { byName: new Map(), byId: new Map(), all: [] };
 let vehicleState = { conectado: true };
 let activeRequest = null;
 let pendingCommand = null;
 let lastCompletedCommand = { id: null, at: 0 };
 let demoExecuting = false;
+let actionPulseTimer = null;
 
 const joystickState = {
   left: { pointerId: null, direction: 'neutral' },
@@ -38,6 +43,12 @@ function getConnectedFlag() {
 
 function setBusy(isBusy) {
   ui.setActionButtonsDisabled(isBusy);
+}
+
+function cancelActionPulse() {
+  if (actionPulseTimer === null) return;
+  window.clearTimeout(actionPulseTimer);
+  actionPulseTimer = null;
 }
 
 function joystickLabel(direction) {
@@ -107,6 +118,8 @@ async function handleCommandExecution(command, { button = null, isStop = false }
 }
 
 async function stopVehicle() {
+  cancelActionPulse();
+  ui.clearDemoMovement();
   keyboardDirections.left.clear();
   keyboardDirections.right.clear();
   for (const joystick of ['left', 'right']) {
@@ -114,6 +127,25 @@ async function stopVehicle() {
     resetJoystickVisual(joystick);
   }
   return handleCommandExecution(getStopCommand(commandIndex), { isStop: true });
+}
+
+async function handleCenterActionClick(action) {
+  cancelActionPulse();
+  const previousStates = ui.getActionStatesSnapshot();
+  ui.toggleActionActive(action);
+
+  const command = commandForCenterAction(commandIndex, action);
+  const accepted = await handleCommandExecution(command, { button: ui.actionButtons[action] });
+  if (!accepted) {
+    ui.restoreActionStates(previousStates);
+    return false;
+  }
+
+  actionPulseTimer = window.setTimeout(() => {
+    actionPulseTimer = null;
+    void handleCommandExecution(getStopCommand(commandIndex), { isStop: true });
+  }, ACTION_PULSE_MS);
+  return true;
 }
 
 async function runSelectedDemo() {
@@ -156,6 +188,7 @@ async function runSelectedDemo() {
 }
 
 async function applyJoystickDirection(joystick, direction) {
+  cancelActionPulse();
   const state = joystickState[joystick];
   if (state.direction === direction) return;
   state.direction = direction;
@@ -250,7 +283,7 @@ function setupControls() {
   ui.demoSelect?.addEventListener('change', () => ui.setDemoSelectionReady(Boolean(ui.demoSelect.value)));
   ui.runDemoButton?.addEventListener('click', () => { void runSelectedDemo(); });
   Object.entries(ui.actionButtons).forEach(([action, button]) => {
-    button?.addEventListener('click', () => handleCommandExecution(commandForCenterAction(commandIndex, action), { button }));
+    button?.addEventListener('click', () => { void handleCenterActionClick(action); });
   });
   window.addEventListener('blur', () => stopVehicle());
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopVehicle(); });
@@ -284,26 +317,7 @@ async function loadVehicleData() {
 }
 
 async function checkApiAndLoadData() {
-  ui.setStatus('api', { state: 'checking', label: 'API…', detail: 'Consultando GET /' });
-  try {
-    const health = await api.request(ENDPOINTS.health());
-    if (!validateHealth(health)) throw new Error('La respuesta de health no coincide con el contrato observado.');
-    ui.setStatus('api', { state: 'online', label: 'API OK', detail: `API ${safeText(health.version, 'sin versión')} disponible` });
-    await loadVehicleData();
-  } catch (error) {
-    ui.setStatus('api', { state: 'offline', label: 'API OFF', detail: error.message || 'No se pudo consultar el API.' });
-    ui.toast(error.message || 'No se pudo consultar el API.', 'error');
-  }
-}
-
-async function checkRdsHealth() {
-  ui.updateRdsStatus('checking', 'Consultando GET /health/db…');
-  try {
-    await api.checkRdsHealth();
-    ui.updateRdsStatus('online', 'Base de datos RDS disponible.');
-  } catch (error) {
-    ui.updateRdsStatus('offline', error?.message || 'No se pudo verificar la base de datos RDS.');
-  }
+  if (await checkApiHealth(api, ui)) await loadVehicleData();
 }
 
 function handleWsState({ state, detail }) {
@@ -318,24 +332,48 @@ function handleWsState({ state, detail }) {
 function handleWsMessage(message) {
   if (isRecord(message) && message.id_vehiculo !== undefined && Number(message.id_vehiculo) !== APP_CONFIG.vehicleId) return;
   if (isRecord(message) && typeof message.conectado === 'boolean') vehicleState = { ...vehicleState, conectado: message.conectado };
+  if (
+    isRecord(message)
+    && message.event === 'nuevo_movimiento'
+    && String(message.origen ?? '').toUpperCase() === 'DEMO'
+  ) {
+    const catalogCommandName = commandIndex.byId.get(Number(message.id_comando))?.nombre;
+    ui.showDemoMovement({
+      demoId: message.id_demo,
+      step: message.paso,
+      total: message.total,
+      commandName: safeText(message.comando, catalogCommandName || `Movimiento #${message.id_comando}`),
+      durationMs: message.duracion_ms,
+      pauseMs: message.pausa_ms,
+    });
+  }
   ui.renderEvent(message);
 }
 
 function startWebSocket() {
-  const socket = new VehicleWebSocket({
-    url: APP_CONFIG.websocketUrl,
+  vehicleSession.subscribe({
     onStateChange: handleWsState,
     onMessage: handleWsMessage,
     onError: () => ui.toast('WebSocket WSS reportó un error; se intentará reconectar.', 'error'),
   });
-  socket.connect();
+  vehicleSession.connect();
 }
+
+const navigation = new NavigationController({
+  links: document.querySelectorAll('[data-view-link]'),
+  views: document.querySelectorAll('[data-view]'),
+  skipLink: document.querySelector('.skip-link'),
+});
+const monitoring = new MonitoringController({ api, session: vehicleSession, vehicleId: APP_CONFIG.vehicleId });
 
 ui.setIdentity({ id: APP_CONFIG.vehicleId, studentName: APP_CONFIG.studentName });
 ui.setActionButtonsDisabled(true);
 ui.setStatus('ws', { state: 'checking', label: 'WSS…', detail: 'Abriendo sesión WSS real…' });
 ui.setStatus('api', { state: 'checking', label: 'API…', detail: 'Comprobando API…' });
+navigation.init();
+monitoring.init();
 setupControls();
 startWebSocket();
-void checkRdsHealth();
+startConnectivityMonitor({ api, ui });
+void checkRdsHealth(api, ui);
 void checkApiAndLoadData();

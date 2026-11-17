@@ -1,4 +1,4 @@
-import { APP_CONFIG } from './config.js';
+import { APP_CONFIG, ENDPOINTS } from './config.js';
 import { isRecord } from './utils.js';
 
 export async function fetchWithTimeout(url, { timeoutMs = APP_CONFIG.requestTimeoutMs, signal, ...options } = {}) {
@@ -59,7 +59,11 @@ export class RestClient {
   }
 
   async checkRdsHealth() {
-    return this.request('/health/db');
+    return this.request(ENDPOINTS.healthDb());
+  }
+
+  async getHistory(vehicleId) {
+    return this.request(ENDPOINTS.history(vehicleId));
   }
 
   async getDemos(vehicleId) {
@@ -95,6 +99,13 @@ export class RestClient {
 
 export function validateHealth(payload) {
   return isRecord(payload) && payload.status === 'ok';
+}
+
+export function validateRdsHealth(payload) {
+  return isRecord(payload)
+    && payload.status === 'ok'
+    && payload.rds === 'connected'
+    && payload.database === 'mysql';
 }
 
 export function validateCommandList(payload) {

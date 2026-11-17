@@ -29,9 +29,16 @@ export class ControlUI {
       api: document.getElementById('status-api-pill'),
       rds: document.getElementById('status-rds-pill'),
     };
+    this.buttonTimers = new WeakMap();
+    this.demoMovementToast = null;
+    this.demoMovementTimer = null;
     this.actionsDisabled = false;
     this.demoAvailable = false;
     this.demoExecuting = false;
+
+    Object.values(this.actionButtons).forEach((button) => {
+      button?.setAttribute('aria-pressed', 'false');
+    });
   }
 
   setIdentity({ name, id, studentName }) {
@@ -142,15 +149,68 @@ export class ControlUI {
     });
   }
 
+  setActionActive(action, isActive) {
+    const activeButton = this.actionButtons[action];
+    if (!activeButton) return false;
+
+    const active = Boolean(isActive);
+    const setButtonState = (button, value) => {
+      button.classList.toggle('is-active', value);
+      button.setAttribute('aria-pressed', String(value));
+    };
+
+    if (active && action === 'off') {
+      ['sound', 'speed', 'light'].forEach((otherAction) => {
+        const button = this.actionButtons[otherAction];
+        if (button) setButtonState(button, false);
+      });
+    }
+    if (active && action !== 'off') {
+      const offButton = this.actionButtons.off;
+      if (offButton) setButtonState(offButton, false);
+    }
+
+    setButtonState(activeButton, active);
+    return active;
+  }
+
+  toggleActionActive(action) {
+    const button = this.actionButtons[action];
+    if (!button) return false;
+    return this.setActionActive(action, !button.classList.contains('is-active'));
+  }
+
+  getActionStatesSnapshot() {
+    return Object.fromEntries(Object.entries(this.actionButtons).map(([action, button]) => [
+      action,
+      Boolean(button?.classList.contains('is-active')),
+    ]));
+  }
+
+  restoreActionStates(snapshot = {}) {
+    Object.entries(this.actionButtons).forEach(([action, button]) => {
+      if (!button) return;
+      const active = Boolean(snapshot[action]);
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+  }
+
   markButton(button, state) {
     if (!button) return;
+    const previousTimer = this.buttonTimers.get(button);
+    if (previousTimer) window.clearTimeout(previousTimer);
     button.dataset.state = state;
     if (state === 'sending') button.disabled = true;
-    window.setTimeout(() => {
+
+    const timer = window.setTimeout(() => {
+      if (this.buttonTimers.get(button) !== timer) return;
+      this.buttonTimers.delete(button);
       if (!button.isConnected) return;
       delete button.dataset.state;
       button.disabled = this.actionsDisabled;
     }, 900);
+    this.buttonTimers.set(button, timer);
   }
 
   renderEvent(event) {
@@ -166,6 +226,58 @@ export class ControlUI {
       event.timestamp ? formatDate(event.timestamp) : null,
     ].filter(Boolean);
     this.eventContent.textContent = parts.join(' · ');
+  }
+
+  showDemoMovement({ demoId, step, total, commandName, durationMs = 0, pauseMs = 0 } = {}) {
+    if (!this.toastRegion) return;
+
+    if (!this.demoMovementToast) {
+      this.demoMovementToast = document.createElement('div');
+      this.demoMovementToast.className = 'demo-step-toast';
+      this.demoMovementToast.setAttribute('role', 'status');
+      this.demoMovementToast.setAttribute('aria-live', 'polite');
+      this.toastRegion.prepend(this.demoMovementToast);
+    }
+
+    const numericStep = Number(step);
+    const numericTotal = Number(total);
+    const safeStep = Number.isFinite(numericStep) ? numericStep : 0;
+    const safeTotal = Number.isFinite(numericTotal) && numericTotal > 0 ? numericTotal : 0;
+    const progress = safeTotal > 0 ? Math.min(1, Math.max(0, safeStep / safeTotal)) : 0;
+
+    const label = document.createElement('span');
+    label.className = 'demo-step-toast__label';
+    label.textContent = `DEMO #${safeText(demoId, '?')} · Paso ${safeStep}/${safeTotal || '?'}`;
+
+    const command = document.createElement('strong');
+    command.className = 'demo-step-toast__command';
+    command.textContent = safeText(commandName, 'Movimiento');
+
+    const progressTrack = document.createElement('div');
+    progressTrack.className = 'demo-step-toast__progress';
+    progressTrack.setAttribute('role', 'progressbar');
+    progressTrack.setAttribute('aria-label', 'Progreso de DEMO');
+    progressTrack.setAttribute('aria-valuemin', '0');
+    progressTrack.setAttribute('aria-valuemax', String(safeTotal || 1));
+    progressTrack.setAttribute('aria-valuenow', String(safeStep));
+
+    const progressBar = document.createElement('span');
+    progressBar.className = 'demo-step-toast__progress-bar';
+    progressBar.style.width = `${progress * 100}%`;
+    progressTrack.append(progressBar);
+
+    this.demoMovementToast.replaceChildren(label, command, progressTrack);
+
+    if (this.demoMovementTimer) window.clearTimeout(this.demoMovementTimer);
+    const hideAfterMs = (Number(durationMs) || 1000) + (Number(pauseMs) || 300) + 1500;
+    this.demoMovementTimer = window.setTimeout(() => this.clearDemoMovement(), hideAfterMs);
+  }
+
+  clearDemoMovement() {
+    if (this.demoMovementTimer) window.clearTimeout(this.demoMovementTimer);
+    this.demoMovementTimer = null;
+    this.demoMovementToast?.remove();
+    this.demoMovementToast = null;
   }
 
   toast(message, type = 'info') {

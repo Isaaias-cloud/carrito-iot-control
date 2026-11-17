@@ -30,6 +30,11 @@
           </div>
         </div>
 
+        <nav class="app-nav" aria-label="Vistas del vehículo">
+          <a class="app-nav__link is-active" data-view-link="control" href="#control">CONTROL</a>
+          <a class="app-nav__link" data-view-link="monitor" href="#monitor">MONITOREO</a>
+        </nav>
+
         <div class="status-strip" aria-label="Estado del sistema">
           <span class="status-pill status-pill--checking" id="status-ws-pill" title="WebSocket">WSS</span>
           <span class="status-pill status-pill--checking" id="status-api-pill" title="API REST">API</span>
@@ -38,7 +43,7 @@
       </header>
 
       <!-- Panel del Gamepad / Consola -->
-      <main id="main-content" class="gamepad-shell" tabindex="-1">
+      <main id="main-content" class="gamepad-shell app-view" data-view="control" tabindex="-1">
         
         <!-- Joystick Izquierdo: Chasis / Desplazamiento -->
         <section class="joystick-zone joystick-zone--left" aria-labelledby="left-joystick-title">
@@ -131,6 +136,52 @@
 
       </main>
 
+      <main id="monitor-view" class="monitor-shell app-view" data-view="monitor" tabindex="-1" aria-labelledby="monitor-heading" hidden>
+        <section class="monitor-hero" aria-labelledby="monitor-heading">
+          <div class="monitor-hero__heading">
+            <p class="eyebrow mb-1">MONITOREO EN TIEMPO REAL</p>
+            <h2 id="monitor-heading" class="monitor-heading">Estado de <span id="monitor-vehicle-name">Excavadora IoT</span></h2>
+            <p class="monitor-connection" id="monitor-connection-message" aria-live="polite">Conectando WSS…</p>
+          </div>
+          <div class="latest-movement-card" id="latest-movement-card" data-state="loading" aria-live="polite">
+            <div class="latest-movement-card__label">Último movimiento reportado</div>
+            <div class="latest-movement-card__command" id="latest-command">Cargando…</div>
+            <div class="latest-movement-card__meta">
+              <span id="latest-code" hidden></span>
+              <span><strong>Fecha:</strong> <time id="latest-date">—</time></span>
+              <span><strong>Hora:</strong> <time id="latest-time">—</time></span>
+            </div>
+            <div class="latest-movement-card__source"><span id="latest-source">Consultando estado reportado por API</span></div>
+            <p class="latest-movement-card__stage" id="latest-stage">Cargando</p>
+          </div>
+        </section>
+
+        <section class="history-panel" aria-labelledby="history-heading">
+          <div class="history-panel__heading">
+            <div>
+              <p class="eyebrow mb-1">RDS · API REST</p>
+              <h2 id="history-heading" class="section-heading">Últimos diez movimientos persistidos</h2>
+            </div>
+            <span class="history-sync" id="history-sync">Consultando historial…</span>
+          </div>
+          <div class="history-table-wrap">
+            <table class="history-table">
+              <caption class="visually-hidden">Últimos diez movimientos individuales persistidos del vehículo</caption>
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Movimiento</th>
+                  <th scope="col">Fecha</th>
+                  <th scope="col">Hora</th>
+                </tr>
+              </thead>
+              <tbody id="history-body"></tbody>
+            </table>
+          </div>
+          <p class="history-message" id="history-message" aria-live="polite">Cargando movimientos…</p>
+        </section>
+      </main>
+
       <!-- Barra inferior compacta de Telemetría -->
       <footer class="gamepad-footer">
         <div class="telemetry-compact" aria-live="polite">
@@ -138,7 +189,7 @@
           <span class="telemetry-value" id="event-content">Escuchando eventos...</span>
         </div>
         <div class="student-credit">
-          <span id="student-name">Isaaias Arrieta Prado</span>
+          <span>Desarrollado por <span id="student-name">Isaaias Arrieta Prado</span> · 2026</span>
         </div>
       </footer>
     </div>
