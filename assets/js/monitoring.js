@@ -1,10 +1,42 @@
 import { APP_CONFIG, ENDPOINTS } from './config.js';
-import { indexActiveCommands } from './domain.js';
+import { CENTER_ACTION_ALIASES, indexActiveCommands } from './domain.js';
 import { validateHistoryList, latestHistoryRows } from './history.js';
 import { validateCommandList } from './rest-client.js';
 import { validateVehicleEvent, validateVehicleState, normalizeRestState, normalizeWssEvent, movementMarker } from './monitoring-state.js';
 import { MonitoringUI } from './monitoring-ui.js';
-import { formatCommandLabel } from './utils.js';
+import { formatCommandLabel, normalizeName } from './utils.js';
+
+function movementTimestamp(movement) {
+  const value = movement?.timestamp ?? movement?.fecha_hora;
+  if (!value) return Number.NaN;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : Number.NaN;
+}
+
+function visualCommandName(movement) {
+  return normalizeName(formatCommandLabel(movement?.command ?? movement?.comando, ''));
+}
+
+function comparableCommandName(name) {
+  return normalizeName(name).replace(/_/g, ' ');
+}
+
+function centerActionNames() {
+  return Object.values(CENTER_ACTION_ALIASES)
+    .flat()
+    .map((alias) => comparableCommandName(alias));
+}
+
+const CENTER_ACTION_NAMES = new Set(centerActionNames());
+
+function isStopMovement(movement) {
+  const name = visualCommandName(movement);
+  return name === 'DETENER' || name === 'STOP';
+}
+
+function isCenterActionMovement(movement) {
+  return CENTER_ACTION_NAMES.has(comparableCommandName(visualCommandName(movement)));
+}
 
 export class MonitoringController {
   constructor({ api, session, vehicleId = APP_CONFIG.vehicleId } = {}) {
@@ -19,6 +51,8 @@ export class MonitoringController {
     this.historyTimer = null;
     this.initialLoadToken = 0;
     this.wssEventSequence = 0;
+    this.suppressAutoStopUntil = 0;
+    this.autoStopTimestamps = [];
     this.unsubscribe = null;
     this.initialized = false;
   }
@@ -33,6 +67,13 @@ export class MonitoringController {
       onStateChange: (state) => this.handleWssState(state),
     });
     void this.loadInitialData();
+  }
+
+  registerAutoStop() {
+    const timestamp = Date.now();
+    this.suppressAutoStopUntil = timestamp + 3000;
+    this.autoStopTimestamps.push(timestamp);
+    if (this.autoStopTimestamps.length > 20) this.autoStopTimestamps.splice(0, this.autoStopTimestamps.length - 20);
   }
 
   setCommandIndex(commandIndex) {
@@ -91,14 +132,23 @@ export class MonitoringController {
       }
     }
 
+    if (historyResult.status === 'fulfilled') {
+      this.applyHistory(historyResult.value);
+    } else {
+      this.ui.setHistoryError(historyResult.reason?.message);
+    }
+
     if (stateResult.status === 'fulfilled') {
       try {
         const state = validateVehicleState(stateResult.value, this.vehicleId);
         const movement = this.enrichMovementWithCatalog(normalizeRestState(state));
         const wssArrivedWhileLoading = this.wssEventSequence > wssSequenceAtStart;
-        if (!wssArrivedWhileLoading && (!this.latestMovement || movementMarker(movement) >= movementMarker(this.latestMovement))) {
-          this.latestMovement = movement;
-          this.ui.renderLatest(movement);
+        const relatedAction = this.findRelatedCenterAction(this.historyRows, movement);
+        const stateToRender = isStopMovement(movement) && relatedAction ? relatedAction : movement;
+        const suppressCurrentAutoStop = isStopMovement(stateToRender) && Date.now() <= this.suppressAutoStopUntil;
+        if (!wssArrivedWhileLoading && !suppressCurrentAutoStop && (!this.latestMovement || movementMarker(stateToRender) >= movementMarker(this.latestMovement))) {
+          this.latestMovement = stateToRender;
+          this.ui.renderLatest(stateToRender);
         }
         if (state.vehiculo) this.ui.setVehicleName(state.vehiculo);
       } catch (error) {
@@ -107,18 +157,15 @@ export class MonitoringController {
     } else if (!this.latestMovement) {
       this.ui.setLatestUnavailable(stateResult.reason?.message, 'error');
     }
-
-    if (historyResult.status === 'fulfilled') {
-      this.applyHistory(historyResult.value);
-    } else {
-      this.ui.setHistoryError(historyResult.reason?.message);
-    }
   }
 
   applyHistory(payload) {
     try {
       const validated = validateHistoryList(payload, this.vehicleId);
-      this.historyRows = latestHistoryRows(validated).map((row) => this.enrichMovementWithCatalog(row));
+      const enrichedRows = validated.map((row) => this.enrichMovementWithCatalog(row));
+      const chronologicalRows = [...enrichedRows].sort((left, right) => movementTimestamp(left) - movementTimestamp(right));
+      const filteredRows = enrichedRows.filter((row) => !this.shouldFilterAutoStop(row, chronologicalRows));
+      this.historyRows = latestHistoryRows(filteredRows);
       this.ui.renderHistory(this.historyRows);
       this.ui.setHistorySyncLabel(`API · ${this.historyRows.length} de máximo 10 registros`);
     } catch (error) {
@@ -126,10 +173,43 @@ export class MonitoringController {
     }
   }
 
+  shouldFilterAutoStop(movement, chronologicalRows) {
+    if (!isStopMovement(movement)) return false;
+
+    const timestamp = movementTimestamp(movement);
+    const nearRegisteredAutoStop = Number.isFinite(timestamp)
+      && this.autoStopTimestamps.some((autoStopTimestamp) => Math.abs(timestamp - autoStopTimestamp) <= 3000);
+    if (nearRegisteredAutoStop) return true;
+
+    const index = chronologicalRows.indexOf(movement);
+    const previousMovement = index > 0 ? chronologicalRows[index - 1] : null;
+    const previousTimestamp = movementTimestamp(previousMovement);
+    const difference = timestamp - previousTimestamp;
+    return Boolean(
+      previousMovement
+      && isCenterActionMovement(previousMovement)
+      && Number.isFinite(difference)
+      && difference >= 0
+      && difference <= 2500,
+    );
+  }
+
+  findRelatedCenterAction(rows, movement) {
+    if (!isStopMovement(movement) || !Array.isArray(rows)) return null;
+    const timestamp = movementTimestamp(movement);
+    if (!Number.isFinite(timestamp)) return null;
+    return rows
+      .filter((row) => isCenterActionMovement(row))
+      .map((row) => ({ row, difference: timestamp - movementTimestamp(row) }))
+      .filter(({ difference }) => Number.isFinite(difference) && difference >= 0 && difference <= 2500)
+      .sort((left, right) => right.difference - left.difference)[0]?.row ?? null;
+  }
+
   handleWssMessage(payload) {
     const validEvent = validateVehicleEvent(payload, this.vehicleId);
     if (!validEvent) return;
     const movement = this.enrichMovementWithCatalog(normalizeWssEvent(validEvent));
+    if (isStopMovement(movement) && Date.now() <= this.suppressAutoStopUntil) return;
     this.wssEventSequence += 1;
     this.latestMovement = movement;
     this.ui.renderLatest(movement);

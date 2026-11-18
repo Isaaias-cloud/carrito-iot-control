@@ -143,6 +143,7 @@ async function handleCenterActionClick(action) {
 
   actionPulseTimer = window.setTimeout(() => {
     actionPulseTimer = null;
+    monitoring.registerAutoStop();
     void handleCommandExecution(getStopCommand(commandIndex), { isStop: true });
   }, ACTION_PULSE_MS);
   return true;
