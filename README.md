@@ -1,51 +1,85 @@
-# Control y monitoreo de vehículo IoT
+# Control y monitoreo del vehículo IoT
 
-Frontend estático, Mobile First y sin backend propio para controlar y monitorear el vehículo `1` mediante el API FastAPI existente. Está pensado para publicarse directamente en GitHub Pages.
+Frontend estático Mobile First para controlar y monitorear en tiempo real el vehículo `1`, identificado por la API como **Excavadora IoT**. El proyecto no contiene backend propio, no accede directamente a MySQL/RDS y está preparado para publicarse en GitHub Pages.
 
-## Contrato validado
+La aplicación conserva dos vistas dentro del mismo documento:
 
-El contrato de CONTROL fue validado mediante consultas HTTPS de solo lectura y los contratos de MONITOREO fueron confirmados con respuestas reales del API el 11 de noviembre de 2026:
+- `#control`: joysticks, acciones manuales, `DETENER` y ejecución de DEMO.
+- `#monitor`: último movimiento reportado y los diez registros persistidos más recientes.
 
-- Base: `https://api-iot-26.duckdns.org`
-- Health real: `GET /` → `status: ok`, versión `2.1.0`.
-- Vehículo: `GET /vehiculos/1` → `Excavadora IoT`, ESP8266.
-- Comandos: `GET /comandos/vehiculo/1` → catálogo activo con `DETENER`, movimiento y acciones auxiliares.
-- DEMO: `GET /demos/vehiculo/1` → `Demo principal` y `Recorrido corto`.
-- Ejecución: `POST /demos/ejecutar` con `{ "id_demo": 1, "id_vehiculo": 1 }`.
-- Movimiento: `POST /vehiculos/1/comando` con `{ "id_comando": 2, "conectado": true, "origen": "MANUAL" }`.
-- Último estado: `GET /estado/vehiculo/1` devuelve `id_vehiculo`, `id_comando`, `conectado`, `fecha_hora`, `vehiculo`, `comando`, `codigo` y `fecha_actualizacion`.
-- Historial: `GET /vehiculos/1/historial` devuelve registros persistidos con `id_historial`, `id_vehiculo`, `comando`, `codigo`, `id_comando`, `fecha_hora` y `origen`.
-- Diagnóstico RDS: `GET /health/db` devuelve `{"status":"ok","rds":"connected","database":"mysql"}`.
-- WebSocket: `wss://api-iot-26.duckdns.org/ws/vehiculo/1`.
+La navegación usa hash (`#control` / `#monitor`) y una única sesión WSS compartida por ambas vistas.
 
-No se usa el endpoint HTTP `http://3.223.103.55:8000/demos/ejecutar` porque produciría mixed content desde GitHub Pages HTTPS; el contrato OpenAPI disponible expone `POST /demos/ejecutar` en el host HTTPS.
+## Funcionalidades actuales
 
-El API no expone una operación de cancelación de DEMO. Por eso «Solicitar DETENER» envía el comando real `DETENER`, informa la limitación y no promete que el backend haya cancelado la secuencia. El diagnóstico RDS sí está disponible mediante `/health/db`; el frontend solo marca RDS como disponible cuando la respuesta coincide exactamente con el contrato observado.
+### Vista de Control (`#control`)
 
-## Arquitectura y flujo de datos
+- Joystick izquierdo para desplazamiento del chasis, con pointer/touch y teclado `W`, `A`, `S`, `D`.
+- Joystick derecho para pala/cámara, con pointer/touch y flechas direccionales.
+- Al liberar un joystick, cancelar el gesto, perder el foco o cambiar de pestaña se solicita el comando remoto `DETENER`.
+- Botones centrales `Ruido`, `Velocidad`, `Luz` y `Apagar`.
+  - Mantienen un estado visual fijo mediante `.is-active` y `aria-pressed`.
+  - `Apagar` es mutuamente excluyente con las otras tres acciones.
+  - Cada acción manual se envía como pulso de `500 ms` y después solicita `DETENER` automáticamente.
+  - El pulso se cancela si comienza otra acción, un movimiento de joystick o un paro manual.
+- Botón general `DETENER` con prioridad sobre solicitudes manuales pendientes.
+- Catálogo remoto de comandos: los botones y direcciones se resuelven mediante `id_comando` y nombres activos devueltos por la API; no se inventan IDs.
+- DEMO:
+  - Selección desde `GET /demos/vehiculo/{id}`.
+  - Inicio mediante `POST /demos/ejecutar`.
+  - El navegador no reproduce la secuencia ni crea pasos simulados.
+  - Cada evento WSS `nuevo_movimiento` con origen `DEMO` actualiza una única notificación superior con `DEMO #N · Paso X/Y`, nombre del comando y progreso.
+  - La notificación de paso se limpia al presionar `DETENER` y se oculta automáticamente usando `duracion_ms`, `pausa_ms` y un margen de 1500 ms.
+- Las notificaciones estándar `.app-toast` se limitan a tres visibles simultáneamente; la notificación `.demo-step-toast` se administra por separado.
+
+### Vista de Monitoreo (`#monitor`)
+
+- Tarjeta **Último movimiento reportado**.
+  - Carga inicial desde `GET /estado/vehiculo/{id}`.
+  - Actualización inmediata al recibir un evento WSS válido del mismo vehículo.
+  - Evita que una respuesta REST antigua sustituya un evento WSS recibido durante la carga.
+  - Muestra comando, código cuando existe, fecha/hora, fuente y etapa reportada.
+- Tabla **Últimos diez movimientos persistidos**.
+  - Fuente exclusiva: `GET /vehiculos/{id}/historial`.
+  - Valida `id_historial` e `id_vehiculo`.
+  - Ordena por `id_historial` descendente, elimina IDs repetidos y limita el resultado a diez filas.
+  - No agrega directamente eventos WSS a la tabla y no elimina registros de RDS.
+  - Después de un evento individual WSS o una reconexión, realiza una sincronización REST controlada.
+- Los nombres de los comandos se enriquecen con el catálogo remoto y se formatean visualmente reemplazando `_` por espacios. La normalización interna de búsqueda permanece en `domain.js`.
+- Los pasos DEMO pueden actualizar la tarjeta, pero solo aparecen en la tabla si el historial REST los devuelve explícitamente.
+
+### Estado y telemetría
+
+El encabezado muestra tres indicadores independientes:
+
+- `WSS`: estado de la sesión WebSocket del navegador (`Conectando`, `En línea`, `Reconectando`, `Desconectado`).
+- `API`: resultado del endpoint de salud `GET /`.
+- `RDS`: resultado del diagnóstico real `GET /health/db`; solo se marca disponible con `status: ok`, `rds: connected` y `database: mysql`.
+
+El footer muestra el último evento WSS recibido y conserva el crédito: **Desarrollado por Isaaias Arrieta Prado · 2026**.
+
+La sesión WSS del navegador no demuestra que un ESP8266/ESP32 esté conectado ni que el vehículo haya ejecutado físicamente un comando. Esa confirmación requiere telemetría o heartbeat del dispositivo, que no forma parte de este frontend.
+
+## Arquitectura
 
 ```text
-UI semántica (index.html)
-       │ hash navigation
-       ├── CONTROL (app.js + ui.js)
-       └── MONITOREO (monitoring.js + monitoring-ui.js)
-                    │
-                    ├── GET estado ───────┐
-                    ├── GET historial ─────┼── rest-client.js ── HTTPS ── FastAPI/AWS
-                    └── evento WSS ────────┘                       │
-                                                                    └── RDS detrás del backend
+index.html
+├── shell compartido: navegación, vehículo, indicadores y footer
+├── #control
+│   ├── app.js
+│   └── ui.js
+└── #monitor
+    ├── monitoring.js
+    ├── monitoring-state.js
+    ├── history.js
+    └── monitoring-ui.js
 
-vehicle-session.js mantiene una única conexión WSS compartida por ambas vistas.
+CONTROL y MONITOREO
+          │
+          ├── RestClient ── HTTPS/REST ── FastAPI/AWS ── RDS MySQL
+          └── VehicleSession ── WSS ── FastAPI/AWS
 ```
 
-1. Al cargar, la interfaz abre una única sesión WSS y consulta `GET /`, vehículo, catálogo, DEMO y los datos de MONITOREO.
-2. El catálogo remoto define qué botones y direcciones están disponibles; no hay IDs de comando inventados.
-3. Una transición del joystick dispara como máximo un POST por cambio de dirección. Neutral, cancelación, pérdida del puntero y botón rojo solicitan `DETENER`.
-4. Todos los controles usan el mismo `sendCommand()` y `POST /vehiculos/{id}/comando`.
-5. La DEMO se inicia con un único `POST /demos/ejecutar`; el navegador no reproduce ni almacena sus pasos.
-6. Los eventos WSS se muestran como telemetría de la sesión del navegador. WSS o API disponible no se presentan como confirmación de conexión física del ESP8266.
-7. MONITOREO usa `fecha_actualizacion` para el estado actual y `id_historial` para ordenar y deduplicar los registros persistidos.
-8. Un evento WSS actualiza la tarjeta inmediatamente. La tabla solo se actualiza después de una nueva consulta controlada al historial REST; los pasos DEMO no se insertan localmente.
+`vehicle-session.js` crea una sola instancia compartida de `VehicleWebSocket`. `app.js` la usa para telemetría y `monitoring.js` para el estado y la reconciliación.
 
 ## Árbol del proyecto
 
@@ -58,138 +92,216 @@ front-end/
     ├── css/
     │   └── styles.css
     └── js/
-        ├── app.js               # CONTROL y orquestación compartida
-        ├── config.js            # URLs, vehículo, timeouts y nombre del alumno
-        ├── connectivity.js      # Indicadores independientes API y RDS
-        ├── domain.js            # Reglas de dominio y catálogo remoto
-        ├── history.js            # Validación, orden y límite del historial
-        ├── monitoring.js         # Orquestación de MONITOREO
-        ├── monitoring-state.js  # Validación y normalización de estado/WSS
-        ├── monitoring-ui.js     # Render seguro de tarjeta e historial
-        ├── navigation.js         # Navegación CONTROL/MONITOREO
-        ├── rest-client.js       # Cliente Fetch modular
-        ├── ui.js                # Render y accesibilidad de la interfaz
-        ├── utils.js             # Validaciones y utilidades seguras
-        ├── vehicle-session.js   # Sesión WSS compartida
-        └── websocket-service.js # Apertura, reconexión y eventos WSS
+        ├── app.js
+        ├── config.js
+        ├── connectivity.js
+        ├── domain.js
+        ├── history.js
+        ├── monitoring-state.js
+        ├── monitoring-ui.js
+        ├── monitoring.js
+        ├── navigation.js
+        ├── rest-client.js
+        ├── ui.js
+        ├── utils.js
+        ├── vehicle-session.js
+        └── websocket-service.js
 ```
 
-## Configuración
+### Responsabilidad de cada archivo
 
-Edita solo `assets/js/config.js` para cambiar el vehículo o el crédito del footer:
+| Archivo | Responsabilidad |
+| --- | --- |
+| `index.html` | Shell semántico, vistas `CONTROL`/`MONITOREO`, IDs de UI, favicon, Bootstrap y módulo principal. |
+| `styles.css` | Tema visual, estados activos, toasts, layout responsive y adaptación a `100dvh`. |
+| `config.js` | URLs, vehículo, zona horaria, timeouts, intervalos y límites de reconexión. |
+| `app.js` | Orquestación de CONTROL, joysticks, teclado, botones, DEMO, pulso de acciones, telemetría WSS e inicialización. |
+| `ui.js` | Render seguro de CONTROL, indicadores, botones activos, DEMO, toasts estándar y pasos DEMO. |
+| `domain.js` | Validación/indexación del catálogo, alias de comandos, payloads y reglas de DETENER. |
+| `rest-client.js` | `fetch`, timeout, `AbortController`, CORS, parseo JSON, errores HTTP e historial/RDS/DEMO. |
+| `connectivity.js` | Comprobación de API y RDS, más monitor periódico de conectividad. |
+| `navigation.js` | Cambio de vista por hash, `aria-current`, `hidden`, título y enlace de salto. |
+| `monitoring.js` | Carga inicial, catálogo, último estado, historial, eventos WSS y sincronización REST. |
+| `monitoring-state.js` | Validación y normalización de estado REST y eventos WSS. |
+| `monitoring-ui.js` | Render seguro de tarjeta, fechas, estado WSS y tabla de historial. |
+| `history.js` | Validación, orden, deduplicación y límite de registros históricos. |
+| `vehicle-session.js` | Fachada compartida para suscriptores de mensajes, estados y errores WSS. |
+| `websocket-service.js` | Apertura, recepción, cierre, errores y reconexión exponencial del WSS. |
+| `utils.js` | Validaciones, texto seguro, formateo de comandos/fechas, JSON y creación de elementos. |
+
+## Configuración real
+
+Los valores actuales de `assets/js/config.js` son:
 
 ```js
-studentName: 'Nombre completo real del alumno'
+apiBaseUrl: 'https://api-iot-26.duckdns.org'
+websocketUrl: 'wss://api-iot-26.duckdns.org/ws/vehiculo/1'
+vehicleId: 1
+studentName: 'Isaaias Arrieta Prado'
+displayTimeZone: 'America/Mexico_City'
+requestTimeoutMs: 10000
+historySyncDelayMs: 450
+connectivityCheckIntervalMs: 60000
+websocketReconnectBaseMs: 1000
+websocketReconnectMaxMs: 15000
 ```
 
-No hay contraseñas, tokens, credenciales AWS ni conexiones MySQL en el frontend. El `conectado` enviado al contrato es un dato de la operación REST; no se interpreta como prueba de hardware físico.
+El frontend no contiene tokens, claves AWS, credenciales MySQL ni encabezados de autorización. `RestClient` usa `mode: 'cors'` y `credentials: 'omit'`; cualquier autenticación adicional debe ser definida por el backend antes de incorporarse.
+
+## Endpoints REST consumidos
+
+| Método | Ruta | Uso |
+| --- | --- | --- |
+| `GET` | `/` | Salud de la API; se espera `status: ok`. |
+| `GET` | `/health/db` | Diagnóstico RDS; se espera `status: ok`, `rds: connected`, `database: mysql`. |
+| `GET` | `/vehiculos/{id}` | Nombre e identidad del vehículo. |
+| `GET` | `/comandos/vehiculo/{id}` | Catálogo activo de comandos. |
+| `GET` | `/estado/vehiculo/{id}` | Último estado reportado. |
+| `GET` | `/vehiculos/{id}/historial` | Registros persistidos para la tabla de diez filas. |
+| `GET` | `/demos/vehiculo/{id}` | Catálogo de DEMOs. |
+| `POST` | `/vehiculos/{id}/comando` | Envío de comandos manuales y `DETENER`. |
+| `POST` | `/demos/ejecutar` | Inicio de una DEMO. |
+
+### Payloads usados
+
+Comando manual:
+
+```json
+{
+  "id_comando": 2,
+  "conectado": true,
+  "origen": "MANUAL"
+}
+```
+
+Ejecución de DEMO:
+
+```json
+{
+  "id_demo": 1,
+  "id_vehiculo": 1
+}
+```
+
+El catálogo remoto contiene objetos con al menos `id_comando` y `nombre`; los comandos activos además deben cumplir la validación de `domain.js`.
+
+## Contratos de estado, historial y WSS
+
+Estado REST observado:
+
+```json
+{
+  "id_vehiculo": 1,
+  "id_comando": 14,
+  "conectado": true,
+  "fecha_hora": null,
+  "vehiculo": "Excavadora IoT",
+  "comando": "DETENER",
+  "codigo": 0,
+  "fecha_actualizacion": "2026-11-11T23:18:31"
+}
+```
+
+Cada fila de historial usa `id_historial`, `id_vehiculo`, `comando`, `codigo`, `id_comando`, `fecha_hora` y `origen`. El frontend conserva los nombres del backend para la lógica y aplica formato visual para mostrar espacios en lugar de guiones bajos.
+
+Evento WSS de movimiento DEMO observado:
+
+```json
+{
+  "event": "nuevo_movimiento",
+  "id_demo": 1,
+  "id_vehiculo": 1,
+  "paso": 5,
+  "total": 8,
+  "orden": 5,
+  "id_comando": 8,
+  "comando": "LUZ",
+  "codigo": 8,
+  "conectado": true,
+  "origen": "DEMO",
+  "timestamp": "2026-11-17T22:29:12.553076+00:00",
+  "duracion_ms": 900,
+  "pausa_ms": 250
+}
+```
+
+Los mensajes WSS se reciben como JSON cuando el backend los publica. El frontend filtra por `id_vehiculo`, valida `event` y `timestamp` para Monitoreo, y muestra la telemetría en el footer. Un evento WSS es evidencia de publicación del backend, no de ejecución física.
+
+## Diseño responsivo y accesibilidad
+
+- `gamepad-wrapper` ocupa `100dvh` y mantiene `overflow: hidden` para que el footer no sea expulsado de la pantalla.
+- `.app-view[hidden]` usa `display: none !important`, evitando que una vista oculta ocupe espacio.
+- `gamepad-shell` es una cuadrícula de tres columnas en escritorio y landscape corto.
+- En portrait móvil usa dos columnas y dos filas: acciones arriba y joysticks lado a lado.
+- Los tamaños de joystick usan `--joystick-size` y `--knob-size`; la perilla permanece centrada con `calc()`.
+- El footer conserva telemetría y créditos; en pantallas menores a `420px` reduce la tipografía sin ocultar `.student-credit`.
+- Monitoreo conserva scroll vertical interno para su contenido.
+- Existe enlace «Saltar al contenido», foco visible, `aria-live`, `aria-current`, nombres accesibles y controles activables por teclado.
+- Los datos remotos se insertan con `textContent`; no se usa HTML remoto como plantilla.
 
 ## Ejecución local
 
-Los módulos ES no deben abrirse con `file://`. Usa cualquier servidor estático, por ejemplo:
+Los módulos ES no deben abrirse con `file://`. Desde la raíz del proyecto:
 
 ```bash
 python -m http.server 5500
 ```
 
-Abre `http://localhost:5500/`. Para un servidor equivalente de Node se puede usar `npx serve .`, sin agregarlo al proyecto.
+Después abre:
 
-El navegador debe permitir CORS desde el origen local. Para GitHub Pages, el backend debe autorizar el origen exacto `https://<usuario>.github.io` o `https://<usuario>.github.io/<repositorio>` según la configuración real del despliegue. CORS no es autenticación.
+```text
+http://localhost:5500/#control
+http://localhost:5500/#monitor
+```
 
-En una comprobación de solo lectura del 9 de noviembre de 2026, el preflight de `POST /vehiculos/1/comando` respondió `200`, `Access-Control-Allow-Origin: *` y permitió `content-type`; la configuración puede cambiar y debe verificarse también con la URL final de Pages. Las respuestas de estado, historial y RDS fueron confirmadas el 11 de noviembre de 2026.
+También puede utilizarse Live Server de VS Code. El backend debe permitir CORS para el origen local y para la URL final de GitHub Pages. CORS no constituye autenticación.
+
+## Verificación técnica
+
+Comprobar sintaxis JavaScript desde PowerShell:
+
+```powershell
+Get-ChildItem assets/js -Filter *.js | ForEach-Object { node --check $_.FullName }
+```
+
+Comprobar el diff:
+
+```bash
+git diff --check
+```
+
+Pruebas funcionales recomendadas:
+
+1. Carga de `#control` y `#monitor`.
+2. Joysticks táctiles/puntero y teclado; confirmar `DETENER` al liberar.
+3. Botones centrales: estado `.is-active`, exclusión de `Apagar`, pulso de 500 ms y paro automático.
+4. DEMO: verificar notificación WSS paso/total, comando y progreso.
+5. Cinco toasts estándar: solo deben quedar tres; `.demo-step-toast` no cuenta para el límite.
+6. Carga de estado e historial; confirmar máximo diez filas y nombres legibles.
+7. Evento WSS desde otra pestaña o cliente independiente.
+8. Pérdida/reconexión WSS y sincronización REST.
+9. Estados independientes de API, RDS y WSS.
+10. Pruebas en escritorio, móvil portrait y móvil landscape, incluyendo footer y créditos.
 
 ## Publicación en GitHub Pages
 
-1. Crea un repositorio y copia estos archivos conservando la carpeta `assets/`.
-2. Reemplaza `studentName` en `assets/js/config.js`.
-3. Verifica localmente los módulos y la consola del navegador.
-4. Publica la rama o carpeta seleccionada desde **Settings → Pages**.
-5. Abre la URL HTTPS de Pages y confirma que cargan `assets/favicon.svg`, `assets/css/styles.css` y `assets/js/app.js` bajo la subruta.
-6. Solicita al backend CORS para esa URL, si todavía no está autorizado.
-7. Comprueba que WSS conecta y que no se intenta abrir ningún recurso `http://`.
+1. Mantén la estructura `assets/` y los paths relativos.
+2. Publica el repositorio o la carpeta configurada en **Settings → Pages**.
+3. Comprueba que `index.html`, CSS, módulos JS y favicon cargan bajo la subruta.
+4. Usa una URL HTTPS de Pages; el frontend utiliza HTTPS para REST y WSS para evitar mixed content.
+5. Confirma que el backend permite el origen exacto de Pages mediante CORS.
+6. Ejecuta una prueba WSS independiente con Postman, Thunder Client o una extensión WebSocket.
 
-Todos los paths son relativos (`./...`) para funcionar en una subruta de GitHub Pages.
+## Limitaciones y seguridad
 
-## Prueba independiente de WebSocket
+- No hay conexión directa del navegador con RDS.
+- No hay administración, CRUD, tablas nuevas ni procedimientos almacenados en este repositorio.
+- No hay integración física confirmable con ESP8266/ESP32 desde el frontend actual.
+- El backend no expone una operación de cancelación de DEMO en el contrato documentado; `DETENER` es un comando de paro, no una confirmación de cancelación de secuencia.
+- Un HTTP 2xx demuestra aceptación de la API, y un evento WSS demuestra publicación; ninguno demuestra por sí solo ejecución física.
+- La URL final de GitHub Pages y su autorización CORS deben comprobarse antes de publicar.
+- Los endpoints externos y su disponibilidad pueden cambiar; este README documenta el contrato observado y la integración presente en el código.
 
-La sesión del navegador permanece abierta en `wss://api-iot-26.duckdns.org/ws/vehiculo/1`. En Postman, Thunder Client o una extensión WebSocket:
+## Créditos
 
-1. Abre una conexión WSS independiente a esa URL.
-2. Abre el frontend en otra pestaña.
-3. Espera el indicador «En línea» en ambas sesiones.
-4. Presiona `AVANZAR`, otro movimiento y `DETENER` en el frontend.
-5. Comprueba que llegan eventos asociados al vehículo `1`, `id_comando`, `conectado`, `origen` y `timestamp` cuando el backend los publique.
-6. Para DEMO, registra hora de inicio, observa N eventos `nuevo_movimiento`, espera la respuesta de `POST /demos/ejecutar` y verifica sus contadores `total_movimientos` y `movimientos_ejecutados`.
-7. Si presionas DETENER durante una DEMO, verifica el evento de DETENER y recuerda que el contrato actual no ofrece una cancelación de DEMO confirmable.
-
-Un HTTP 2xx y un evento WSS solo prueban aceptación/publicación en el backend; no prueban ejecución física.
-
-## Casos de prueba
-
-### Joystick y teclado
-
-- Arrastra hacia cada dirección disponible: se envía un POST solo al entrar en la dirección.
-- Mantén el puntero quieto: no se generan POST por píxel ni por frame.
-- Regresa a la zona neutral o suelta: el knob vuelve al centro y se envía DETENER.
-- Cancela el gesto, cambia de pestaña o pierde el puntero: se solicita DETENER.
-- Enfoca el joystick con teclado y prueba flechas/WASD, incluyendo `keyup`.
-- Cambia rápidamente de dirección: el envío se serializa y DETENER aborta la solicitud local pendiente con prioridad.
-
-### Botones y errores
-
-- Confirma que solo aparecen comandos activos devueltos por el API.
-- Haz doble click: no deben existir dos POST simultáneos del mismo control.
-- Desconecta la red: aparece mensaje de error y el estado se vuelve visible.
-- Devuelve 422/404/5xx en un entorno controlado: el mensaje es amigable y no se inserta JSON como HTML.
-
-### DEMO
-
-- Selecciona cada DEMO y confirma que la descripción proviene del API.
-- Inicia una DEMO y verifica que el navegador no ejecuta timers ni inventa pasos.
-- Intenta iniciar otra mientras corre: el botón permanece deshabilitado.
-- Presiona Solicitar DETENER: se envía DETENER y se comunica honestamente la ausencia de endpoint de cancelación.
-
-### MONITOREO y reconciliación
-
-- Carga inicial: abrir `#monitor`, comprobar que la tarjeta usa `GET /estado/vehiculo/1` y que la tabla muestra como máximo diez filas de `GET /vehiculos/1/historial`.
-- El orden visible se basa en `id_historial` descendente; el frontend no crea filas persistentes ni elimina registros del backend.
-- Comando desde CONTROL: enviar un movimiento y comprobar el evento WSS en la tarjeta. Después de la sincronización REST, verificar si el movimiento aparece en historial.
-- Segunda pestaña o cliente WSS: producir un comando externo y comprobar que la primera pestaña actualiza MONITOREO sin recargar.
-- Más de diez movimientos: comprobar que solo se muestran diez y que los registros antiguos siguen existiendo en el API.
-- Duplicados y orden: repetir el mismo evento WSS y comprobar que no se agrega una fila local; la tabla se reconstruye únicamente desde `id_historial`.
-- Pérdida y reconexión WSS: simular desconexión, comprobar «Desconectado»/«Reconectando» y verificar una resincronización REST al volver «En línea».
-- DEMO: comprobar que sus pasos pueden actualizar la tarjeta, pero no se agregan a la tabla salvo que el historial REST los devuelva explícitamente.
-- Fecha y hora: comparar la tarjeta y tabla con `fecha_actualizacion`/`fecha_hora`; los valores con zona explícita se convierten a `America/Mexico_City` y los valores sin zona se muestran literalmente como hora del backend, porque el contrato no documenta una zona para esos campos.
-- Salud: comprobar API mediante `/`, RDS mediante `/health/db` y WSS mediante el estado real de la sesión. Ninguno sustituye a los otros.
-
-Evidencia recomendada: captura de la tarjeta antes y después del evento, consola de red con las respuestas REST, cliente WSS independiente mostrando el mismo evento, y captura del historial antes/después de la sincronización. La ejecución física del ESP8266/ESP32 queda pendiente hasta contar con hardware y telemetría de presencia.
-
-### Responsive y accesibilidad
-
-- Prueba móvil vertical/horizontal, tableta y escritorio.
-- Comprueba que no haya scroll horizontal, que el footer no se superponga y que los controles táctiles tengan áreas cómodas.
-- Navega con Tab, activa controles con teclado y revisa foco visible, contraste y mensajes `aria-live`.
-- Comprueba el favicon y todos los recursos en la URL final de GitHub Pages.
-
-## Checklist de seguridad y calidad
-
-- [x] HTTPS para REST y WSS para tiempo real; sin mixed content intencional.
-- [x] Sin secretos, tokens privilegiados, credenciales AWS/RDS o conexión MySQL en cliente.
-- [x] Sin acceso directo a RDS y sin endpoint `/health` inventado.
-- [x] JSON remoto validado antes de usarlo; texto renderizado con `textContent`.
-- [x] `AbortController`, timeout, errores HTTP y solicitudes tardías gestionados.
-- [x] `DETENER` con prioridad y catálogo dinámico; no se inventan IDs ni pasos.
-- [x] Indicadores separados para WSS, API y RDS; RDS se valida con `/health/db` sin conectarse directamente a MySQL.
-- [x] Favicon propio y footer responsivo con crédito configurable.
-- [ ] Confirmar en el backend CORS, métodos autorizados y origen exacto de GitHub Pages.
-- [ ] Sustituir `[Nombre completo del alumno]` en `assets/js/config.js`.
-- [ ] Ejecutar la prueba WSS independiente y validar comportamiento físico cuando el hardware esté conectado.
-
-## Commits sugeridos
-
-```text
-feat: crear shell mobile first del control IoT
-feat: integrar catálogo, comandos y DEMO con API FastAPI
-feat: agregar sesión WebSocket con reconexión
-docs: documentar contrato, publicación y pruebas
-```
+Desarrollado por **Isaaias Arrieta Prado · 2026**.
