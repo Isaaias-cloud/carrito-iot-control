@@ -1,4 +1,4 @@
-import { isRecord } from './utils.js';
+import { formatCommandLabel, isRecord } from './utils.js';
 
 const MAX_HISTORY_ROWS = 10;
 
@@ -26,7 +26,7 @@ export function validateHistoryList(payload, vehicleId) {
     return {
       id_historial: Number(item.id_historial),
       id_vehiculo: Number(item.id_vehiculo),
-      comando: item.comando.trim(),
+      comando: formatCommandLabel(item.comando),
       codigo: item.codigo ?? null,
       id_comando: item.id_comando ?? null,
       fecha_hora: item.fecha_hora,

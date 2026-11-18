@@ -2,7 +2,7 @@ import { APP_CONFIG, ENDPOINTS } from './config.js';
 import { ApiError, RestClient, validateCommandList } from './rest-client.js';
 import { ControlUI } from './ui.js';
 import { commandForCenterAction, commandForJoystickDirection, commandPayload, getStopCommand, indexActiveCommands, validateDemoPayload } from './domain.js';
-import { isRecord, safeText } from './utils.js';
+import { formatCommandLabel, isRecord, safeText } from './utils.js';
 import { checkApiHealth, checkRdsHealth, startConnectivityMonitor } from './connectivity.js';
 import { NavigationController } from './navigation.js';
 import { MonitoringController } from './monitoring.js';
@@ -101,7 +101,7 @@ async function handleCommandExecution(command, { button = null, isStop = false }
     vehicleState = { ...vehicleState, conectado: response.conectado };
     if (!isStop) lastCompletedCommand = { id: command.id_comando, at: Date.now() };
     if (button) ui.markButton(button, 'accepted');
-    if (!isStop) ui.toast(`${safeText(command.nombre)} aceptado por la API.`, 'success');
+    if (!isStop) ui.toast(`${formatCommandLabel(command.nombre, 'Comando')} aceptado por la API.`, 'success');
     return true;
   } catch (error) {
     if (button) ui.markButton(button, 'error');
@@ -302,6 +302,7 @@ async function loadVehicleData() {
   if (commandsResult.status === 'fulfilled' && validateCommandList(commandsResult.value)) {
     try {
       commandIndex = indexActiveCommands(commandsResult.value, APP_CONFIG.vehicleId);
+      monitoring.setCommandIndex(commandIndex);
       ui.setActionButtonsDisabled(false);
     } catch (error) { ui.toast(error.message, 'error'); }
   } else {
@@ -342,7 +343,7 @@ function handleWsMessage(message) {
       demoId: message.id_demo,
       step: message.paso,
       total: message.total,
-      commandName: safeText(message.comando, catalogCommandName || `Movimiento #${message.id_comando}`),
+      commandName: formatCommandLabel(message.comando, catalogCommandName || `Movimiento #${message.id_comando}`),
       durationMs: message.duracion_ms,
       pauseMs: message.pausa_ms,
     });

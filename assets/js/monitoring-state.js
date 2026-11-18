@@ -1,4 +1,4 @@
-import { isRecord } from './utils.js';
+import { formatCommandLabel, isRecord } from './utils.js';
 
 function validTimestamp(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -23,7 +23,7 @@ export function validateVehicleEvent(payload, vehicleId) {
 export function normalizeRestState(payload) {
   return {
     vehicleId: Number(payload.id_vehiculo),
-    command: typeof payload.comando === 'string' && payload.comando.trim() ? payload.comando.trim() : null,
+    command: formatCommandLabel(payload.comando, '') || null,
     commandId: payload.id_comando ?? null,
     code: payload.codigo ?? null,
     timestamp: validTimestamp(payload.fecha_actualizacion) || validTimestamp(payload.fecha_hora),
@@ -36,7 +36,7 @@ export function normalizeRestState(payload) {
 export function normalizeWssEvent(payload) {
   return {
     vehicleId: Number(payload.id_vehiculo),
-    command: typeof payload.comando === 'string' && payload.comando.trim() ? payload.comando.trim() : null,
+    command: formatCommandLabel(payload.comando, '') || null,
     commandId: payload.id_comando ?? null,
     code: payload.codigo ?? null,
     timestamp: payload.timestamp,

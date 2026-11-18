@@ -16,6 +16,13 @@ export function safeText(value, fallback = '—') {
   return value === null || value === undefined || value === '' ? fallback : String(value);
 }
 
+export function formatCommandLabel(name, fallback = '') {
+  return safeText(name, fallback)
+    .replace(/\_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function hasExplicitTimeZone(value) {
   return typeof value === 'string' && /(Z|[+-]\d{2}:?\d{2})$/i.test(value);
 }

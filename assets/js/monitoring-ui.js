@@ -1,4 +1,4 @@
-import { formatDateParts, safeText } from './utils.js';
+import { formatCommandLabel, formatDateParts, safeText } from './utils.js';
 
 export class MonitoringUI {
   constructor() {
@@ -54,7 +54,7 @@ export class MonitoringUI {
   renderLatest(movement) {
     if (!movement) return this.setLatestUnavailable('Sin movimiento reportado.', 'empty');
     if (this.latestCard) this.latestCard.dataset.state = 'ready';
-    if (this.latestCommand) this.latestCommand.textContent = movement.command || `Comando #${safeText(movement.commandId)}`;
+    if (this.latestCommand) this.latestCommand.textContent = formatCommandLabel(movement.command, `Comando #${safeText(movement.commandId)}`);
     if (this.latestCode) {
       const hasCode = movement.code !== null && movement.code !== undefined && movement.code !== '';
       this.latestCode.hidden = !hasCode;
@@ -91,7 +91,7 @@ export class MonitoringUI {
       number.scope = 'row';
       number.textContent = String(index + 1);
       const command = document.createElement('td');
-      command.textContent = safeText(record.comando);
+      command.textContent = formatCommandLabel(record.comando);
       const date = document.createElement('td');
       const dateParts = formatDateParts(record.fecha_hora);
       date.textContent = dateParts.date;

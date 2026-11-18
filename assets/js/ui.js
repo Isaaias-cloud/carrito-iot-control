@@ -1,6 +1,7 @@
-import { formatDate, safeText, createElement } from './utils.js';
+import { formatCommandLabel, formatDate, safeText, createElement } from './utils.js';
 
 const STATUS_CLASSES = new Set(['online', 'offline', 'checking', 'unknown']);
+const MAX_VISIBLE_TOASTS = 3;
 
 export class ControlUI {
   constructor() {
@@ -251,7 +252,7 @@ export class ControlUI {
 
     const command = document.createElement('strong');
     command.className = 'demo-step-toast__command';
-    command.textContent = safeText(commandName, 'Movimiento');
+    command.textContent = formatCommandLabel(commandName, 'Movimiento');
 
     const progressTrack = document.createElement('div');
     progressTrack.className = 'demo-step-toast__progress';
@@ -282,8 +283,12 @@ export class ControlUI {
 
   toast(message, type = 'info') {
     if (!this.toastRegion) return;
+    const activeToasts = [...this.toastRegion.querySelectorAll('.app-toast')];
+    while (activeToasts.length >= MAX_VISIBLE_TOASTS) {
+      activeToasts.shift()?.remove();
+    }
     const toast = createElement('div', `app-toast app-toast--${type}`, message);
     this.toastRegion.append(toast);
-    window.setTimeout(() => toast.remove(), 5200);
+    window.setTimeout(() => toast.remove(), 1800);
   }
 }
