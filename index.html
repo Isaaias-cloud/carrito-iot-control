@@ -19,7 +19,7 @@
   <body class="gamepad-body">
     <a class="skip-link" href="#main-content">Saltar al contenido</a>
 
-    <div class="gamepad-wrapper">
+    <div class="gamepad-wrapper" data-auth-only hidden>
       <!-- Barra superior compacta -->
       <header class="gamepad-header">
         <div class="brand-lockup">
@@ -33,7 +33,21 @@
         <nav class="app-nav" aria-label="Vistas del vehículo">
           <a class="app-nav__link is-active" data-view-link="control" href="#control">CONTROL</a>
           <a class="app-nav__link" data-view-link="monitor" href="#monitor">MONITOREO</a>
+          <a class="app-nav__link" data-view-link="admin" data-role="ADMIN" href="#admin" hidden>ADMINISTRACIÓN</a>
         </nav>
+
+        <div class="auth-summary" aria-label="Sesión actual">
+          <span id="auth-user-name">—</span>
+          <span class="auth-summary__role" id="auth-user-role">—</span>
+          <button class="btn btn-sm btn-outline-light" id="auth-logout" type="button">Cerrar sesión</button>
+          <button class="btn btn-sm btn-link text-light" id="auth-guest-header" data-guest-entry type="button">Modo invitado</button>
+        </div>
+
+        <label class="vehicle-context" data-owner-access hidden>Mis vehículos
+          <select id="vehicle-selector" aria-label="Seleccionar vehículo propio o con soporte vigente">
+            <option value="">Cargando unidades…</option>
+          </select>
+        </label>
 
         <div class="status-strip" aria-label="Estado del sistema">
           <span class="status-pill status-pill--checking" id="status-ws-pill" title="WebSocket">WSS</span>
@@ -41,6 +55,47 @@
           <span class="status-pill status-pill--unknown" id="status-rds-pill" title="Base de datos RDS">RDS</span>
         </div>
       </header>
+
+      <section class="guest-banner" id="guest-banner" data-auth-only hidden role="status" aria-live="polite">
+        <span>Sesión de exhibición activa · unidad reservada · <strong id="guest-timer">05:00</strong></span>
+        <button class="btn btn-sm btn-danger" id="guest-finish" type="button">Finalizar sesión</button>
+      </section>
+
+      <details class="owner-experience" id="owner-experience" data-auth-only hidden>
+        <summary>Mis vehículos · soporte y demos privadas</summary>
+        <p class="owner-status" id="owner-message" role="status" aria-live="polite">Cargando unidades…</p>
+        <section class="support-panel" id="support-panel" aria-labelledby="support-heading">
+          <div class="owner-panel-heading"><h2 id="support-heading">Autorización temporal de soporte</h2><span>Duración máxima: 30 minutos</span></div>
+          <p class="owner-status" id="support-message" role="status" aria-live="polite">Consultando autorización…</p>
+          <form class="owner-form" id="support-form" data-owner-only hidden>
+            <label>Administrador<select id="support-admin" name="id_admin" required></select></label>
+            <label>Motivo<input name="motivo" required maxlength="255" placeholder="Diagnóstico o asistencia autorizada" /></label>
+            <button class="btn btn-outline-warning" type="submit">Autorizar 30 minutos</button>
+          </form>
+          <button class="btn btn-sm btn-outline-danger" id="support-revoke" type="button" hidden>Revocar soporte</button>
+        </section>
+        <section class="owner-demos" data-owner-only hidden aria-labelledby="owner-demos-heading">
+          <div class="owner-panel-heading"><h2 id="owner-demos-heading">Mis Demos</h2><span>Máximo 100 pasos · 300000 ms</span></div>
+          <form class="owner-form" id="owner-demo-form">
+            <label>Nombre<input name="nombre" required maxlength="80" /></label>
+            <label>Descripción<input name="descripcion" maxlength="255" /></label>
+            <button class="btn btn-primary" id="owner-demo-submit" type="submit">Crear demo</button>
+            <button class="btn btn-outline-secondary" id="owner-demo-cancel" type="button" hidden>Cancelar edición</button>
+          </form>
+          <div class="owner-demos-list" id="owner-demos-list"></div>
+          <section class="owner-demo-editor" id="owner-demo-editor" hidden aria-labelledby="owner-demo-title">
+            <div class="owner-panel-heading"><h3 id="owner-demo-title">Pasos</h3><div><button class="btn btn-sm btn-success" id="owner-demo-run" type="button">Ejecutar</button><button class="btn btn-sm btn-outline-danger" id="owner-demo-delete" type="button">Eliminar</button></div></div>
+            <form class="owner-step-form" id="owner-step-form">
+              <label>Orden<input name="orden" type="number" min="1" max="100" value="1" required /></label>
+              <label>Comando<select name="id_comando" required><option value="">Selecciona comando</option></select></label>
+              <label>Duración ms<input name="duracion_ms" type="number" min="0" max="300000" value="500" required /></label>
+              <label>Pausa ms<input name="pausa_ms" type="number" min="0" max="300000" value="0" required /></label>
+              <button class="btn btn-outline-info" type="submit">Agregar paso</button>
+            </form>
+            <div class="owner-steps" id="owner-demo-steps"></div>
+          </section>
+        </section>
+      </details>
 
       <!-- Panel del Gamepad / Consola -->
       <main id="main-content" class="gamepad-shell app-view" data-view="control" tabindex="-1">
@@ -187,6 +242,93 @@
         </section>
       </main>
 
+      <main id="admin-view" class="admin-shell app-view" data-view="admin" tabindex="-1" aria-labelledby="admin-heading" data-auth-only hidden>
+        <section class="admin-hero" aria-labelledby="admin-heading">
+          <div>
+            <p class="eyebrow mb-1">OPERACIÓN Y CUMPLIMIENTO</p>
+            <h2 id="admin-heading" class="section-heading">ADMINISTRACIÓN</h2>
+            <p class="admin-lead">Catálogo, inventario, clientes, demos empresariales y bitácora consultados desde la API protegida.</p>
+          </div>
+          <button class="btn btn-outline-info" id="admin-refresh" type="button">Actualizar datos</button>
+        </section>
+        <p class="admin-status" id="admin-message" role="status" aria-live="polite">Esperando datos administrativos…</p>
+
+        <section class="admin-section" aria-labelledby="admin-dashboard-heading">
+          <div class="admin-section__heading"><h3 id="admin-dashboard-heading">Dashboard</h3><span>Resumen real de RDS</span></div>
+          <div class="admin-metrics" aria-label="Métricas administrativas">
+            <article class="admin-metric"><span>Vehículos legacy</span><strong id="metric-vehicles">—</strong></article>
+            <article class="admin-metric"><span>Unidades físicas</span><strong id="metric-units">—</strong></article>
+            <article class="admin-metric"><span>Modelos activos</span><strong id="metric-models">—</strong></article>
+            <article class="admin-metric"><span>Usuarios</span><strong id="metric-users">—</strong></article>
+            <article class="admin-metric"><span>Asignaciones</span><strong id="metric-assignments">—</strong></article>
+            <article class="admin-metric"><span>Demos</span><strong id="metric-demos">—</strong></article>
+            <article class="admin-metric"><span>Eventos auditados</span><strong id="metric-audit">—</strong></article>
+          </div>
+          <div class="admin-inventory-summary" id="admin-inventory-summary" aria-label="Unidades por estado"></div>
+        </section>
+
+        <section class="admin-section" aria-labelledby="admin-models-heading">
+          <div class="admin-section__heading"><h3 id="admin-models-heading">Modelos y unidades</h3><span>Catálogo e inventario físico</span></div>
+          <form class="admin-form-grid" id="admin-model-form">
+            <label>Clave<input name="clave" required maxlength="64" autocomplete="off" /></label>
+            <label>Nombre<input name="nombre" required maxlength="120" /></label>
+            <label>Microcontrolador<input name="microcontrolador" maxlength="100" /></label>
+            <label class="admin-form-wide">Descripción<textarea name="descripcion" maxlength="500" rows="2"></textarea></label>
+            <button class="btn btn-primary" id="admin-model-submit" type="submit">Crear modelo</button><button class="btn btn-outline-secondary" id="admin-model-cancel" type="button" hidden>Cancelar edición</button>
+          </form>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Modelos de vehículo</caption><thead><tr><th>ID</th><th>Clave</th><th>Nombre</th><th>Microcontrolador</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="admin-models-body"></tbody></table></div>
+          <label class="admin-inline-label">Capacidades del modelo<select id="admin-capability-model"><option value="">Selecciona un modelo</option></select></label>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Comandos permitidos por modelo</caption><thead><tr><th>Código</th><th>Comando</th><th>Permitido</th></tr></thead><tbody id="admin-capability-body"></tbody></table></div>
+          <form class="admin-form-grid" id="admin-unit-form">
+            <label>Modelo<select id="admin-unit-model" name="id_modelo" required></select></label>
+            <label>Identificador único<input name="identificador_unico" required maxlength="80" /></label>
+            <label>Nombre de unidad<input name="nombre" required maxlength="80" /></label>
+            <label>Estado<select name="estado_inventario"><option>INVENTARIO</option><option>EXHIBICION</option><option>VENDIDA</option><option>MANTENIMIENTO</option><option>BAJA</option></select></label>
+            <label class="admin-form-wide">Descripción<textarea name="descripcion" maxlength="255" rows="2"></textarea></label>
+            <button class="btn btn-primary" id="admin-unit-submit" type="submit">Registrar unidad</button><button class="btn btn-outline-secondary" id="admin-unit-cancel" type="button" hidden>Cancelar edición</button>
+          </form>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Unidades físicas</caption><thead><tr><th>ID</th><th>Identificador</th><th>Nombre</th><th>Modelo</th><th>Estado</th><th>Activo</th><th>Acción</th></tr></thead><tbody id="admin-units-body"></tbody></table></div>
+        </section>
+
+        <section class="admin-section" aria-labelledby="admin-clients-heading">
+          <div class="admin-section__heading"><h3 id="admin-clients-heading">Clientes y asignaciones</h3><span>Usuarios USUARIO y propiedad activa</span></div>
+          <form class="admin-form-grid" id="admin-client-form">
+            <label>Nombre<input name="nombre" required maxlength="120" /></label>
+            <label>Correo<input name="email" type="email" required maxlength="254" autocomplete="email" /></label>
+            <label>Contraseña temporal<input name="password" type="password" required minlength="12" autocomplete="new-password" /></label>
+            <button class="btn btn-primary" type="submit">Crear cliente</button>
+          </form>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Clientes registrados</caption><thead><tr><th>ID</th><th>Nombre</th><th>Correo</th><th>Estado</th><th>Correo</th><th>Acción</th></tr></thead><tbody id="admin-clients-body"></tbody></table></div>
+          <form class="admin-form-grid" id="admin-assignment-form">
+            <label>Unidad<select id="admin-assignment-unit" name="id_vehiculo" required></select></label>
+            <label>Cliente<select id="admin-assignment-client" name="id_usuario" required></select></label>
+            <label>Motivo<input name="motivo" maxlength="255" /></label>
+            <button class="btn btn-primary" type="submit">Asignar unidad</button>
+          </form>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Asignaciones de vehículos</caption><thead><tr><th>ID</th><th>Unidad</th><th>Cliente</th><th>Tipo</th><th>Estado</th><th>Inicio</th><th>Acción</th></tr></thead><tbody id="admin-assignments-body"></tbody></table></div>
+        </section>
+
+        <section class="admin-section" aria-labelledby="admin-operations-heading">
+          <div class="admin-section__heading"><h3 id="admin-operations-heading">Demos y comandos permitidos</h3><span>Consulta por unidad; respeta autorización de soporte</span></div>
+          <label class="admin-inline-label">Unidad<select id="admin-operations-unit"><option value="">Selecciona una unidad</option></select></label>
+          <form class="admin-form-grid" id="admin-command-form">
+            <label>Nombre<input name="nombre" required maxlength="100" /></label>
+            <label>Código<input name="codigo" type="number" min="0" max="65535" required /></label>
+            <label class="admin-form-wide">Descripción<textarea name="descripcion" required maxlength="500" rows="2"></textarea></label>
+            <button class="btn btn-primary" type="submit">Agregar comando</button>
+          </form>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Comandos permitidos</caption><thead><tr><th>ID</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="admin-commands-body"></tbody></table></div>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Demos empresariales</caption><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Estado</th></tr></thead><tbody id="admin-demos-body"></tbody></table></div>
+        </section>
+
+        <section class="admin-section" aria-labelledby="admin-audit-heading">
+          <div class="admin-section__heading"><h3 id="admin-audit-heading">Bitácora de auditoría</h3><span>Eventos recientes registrados por la API</span></div>
+          <label class="admin-inline-label">Filtrar recurso<select id="admin-audit-filter"><option value="">Todos</option><option value="AUTH">AUTH</option><option value="VEHICULO">VEHICULO</option><option value="ASIGNACION">ASIGNACION</option><option value="AUTORIZACION_SOPORTE">AUTORIZACION_SOPORTE</option></select></label>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Eventos de auditoría</caption><thead><tr><th>ID</th><th>Fecha</th><th>Actor</th><th>Acción</th><th>Recurso</th><th>ID recurso</th><th>Usuario</th></tr></thead><tbody id="admin-audit-body"></tbody></table></div>
+          <button class="btn btn-outline-secondary" id="admin-audit-more" type="button" hidden>Cargar más eventos</button>
+        </section>
+      </main>
+
       <!-- Barra inferior compacta de Telemetría -->
       <footer class="gamepad-footer">
         <div class="telemetry-compact" aria-live="polite">
@@ -198,6 +340,28 @@
         </div>
       </footer>
     </div>
+
+    <dialog class="auth-dialog" id="auth-dialog" aria-labelledby="auth-title">
+      <form id="auth-form" method="dialog">
+        <p class="eyebrow mb-1">VEHÍCULO IoT</p>
+        <h2 id="auth-title">Iniciar sesión</h2>
+        <p class="auth-dialog__lead">Usa una cuenta autorizada para abrir CONTROL, MONITOREO o ADMINISTRACIÓN.</p>
+        <label for="auth-email">Correo electrónico</label>
+        <input id="auth-email" name="email" type="email" autocomplete="username" required />
+        <label for="auth-password">Contraseña</label>
+        <input id="auth-password" name="password" type="password" autocomplete="current-password" required />
+        <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
+        <div class="auth-dialog__actions">
+          <button class="btn btn-primary" id="auth-submit" type="submit">Iniciar sesión</button>
+          <button class="btn btn-link" id="auth-guest" data-guest-entry type="button">Probar como Invitado (Exhibición)</button>
+        </div>
+        <section class="guest-catalog" id="guest-catalog" hidden aria-labelledby="guest-catalog-title">
+          <h3 id="guest-catalog-title">Vehículos de exhibición</h3>
+          <p class="guest-message" id="guest-message" role="status" aria-live="polite">Selecciona una unidad disponible para reservarla durante 5 minutos.</p>
+          <div class="guest-vehicles" id="guest-vehicles"></div>
+        </section>
+      </form>
+    </dialog>
 
     <!-- Región de notificaciones / mensajes emergentes -->
     <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>

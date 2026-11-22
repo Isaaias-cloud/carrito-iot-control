@@ -39,7 +39,7 @@ function isCenterActionMovement(movement) {
 }
 
 export class MonitoringController {
-  constructor({ api, session, vehicleId = APP_CONFIG.vehicleId } = {}) {
+  constructor({ api, session, vehicleId = 0 } = {}) {
     this.api = api;
     this.session = session;
     this.vehicleId = Number(vehicleId);
@@ -57,7 +57,7 @@ export class MonitoringController {
     this.initialized = false;
   }
 
-  init() {
+  init({ load = true } = {}) {
     if (this.initialized) return;
     this.initialized = true;
     this.ui.setLatestLoading();
@@ -66,7 +66,20 @@ export class MonitoringController {
       onMessage: (message) => this.handleWssMessage(message),
       onStateChange: (state) => this.handleWssState(state),
     });
-    void this.loadInitialData();
+    if (load && this.vehicleId > 0) void this.loadInitialData();
+  }
+
+  setVehicle(vehicleId) {
+    const nextVehicleId = Number(vehicleId);
+    if (!Number.isInteger(nextVehicleId) || nextVehicleId <= 0) return;
+    this.vehicleId = nextVehicleId;
+    this.initialLoadToken += 1;
+    this.latestMovement = null;
+    this.historyRows = [];
+    this.commandsById = new Map();
+    this.ui.setLatestLoading();
+    this.ui.setHistoryLoading();
+    if (this.initialized) void this.loadInitialData();
   }
 
   registerAutoStop() {

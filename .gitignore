@@ -1,0 +1,19 @@
+# Configuración y credenciales locales
+.env
+.env.*
+!.env.example
+*.sql
+*.dump
+*.bak
+secrets.h
+**/secrets.h
+credentials*.json
+*credentials*
+device_tokens*.json
+*.pem
+*.key
+
+# Artefactos locales
+node_modules/
+dist/
+build/

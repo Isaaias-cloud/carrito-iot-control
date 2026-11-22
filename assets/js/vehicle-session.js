@@ -1,10 +1,10 @@
-import { APP_CONFIG } from './config.js';
 import { VehicleWebSocket } from './websocket-service.js';
 
 export class VehicleSession {
-  constructor({ url } = {}) {
+  constructor({ url, onAuthFailure } = {}) {
     this.socket = new VehicleWebSocket({
       url,
+      onAuthFailure,
       onStateChange: (state) => this.stateListeners.forEach((listener) => listener(state)),
       onMessage: (message) => this.messageListeners.forEach((listener) => listener(message)),
       onError: (error) => this.errorListeners.forEach((listener) => listener(error)),
@@ -31,6 +31,9 @@ export class VehicleSession {
     this.started = true;
     this.socket.connect();
   }
-}
 
-export const vehicleSession = new VehicleSession({ url: APP_CONFIG.websocketUrl });
+  disconnect() {
+    this.started = false;
+    this.socket.disconnect();
+  }
+}

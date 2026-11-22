@@ -6,9 +6,21 @@ import { formatCommandLabel, isRecord, safeText } from './utils.js';
 import { checkApiHealth, checkRdsHealth, startConnectivityMonitor } from './connectivity.js';
 import { NavigationController } from './navigation.js';
 import { MonitoringController } from './monitoring.js';
-import { vehicleSession } from './vehicle-session.js';
+import { VehicleSession } from './vehicle-session.js';
+import { websocketUrl } from './config.js';
+import { AuthSession } from './auth-session.js';
+import { AuthUI } from './auth-ui.js';
+import { AdminController } from './admin.js';
+import { OwnerExperience } from './owner-experience.js';
+import { GuestExperience } from './guest-experience.js';
 
-const api = new RestClient({ baseUrl: APP_CONFIG.apiBaseUrl });
+const authSession = new AuthSession();
+const api = new RestClient({ baseUrl: APP_CONFIG.apiBaseUrl, authSession });
+let selectedVehicleId = null;
+const vehicleSession = new VehicleSession({
+  url: () => selectedVehicleId ? websocketUrl(selectedVehicleId, authSession.getAccessToken()) : null,
+  onAuthFailure: () => { if (authSession.isGuest()) authSession.clear(); },
+});
 const ui = new ControlUI();
 const ACTION_PULSE_MS = 500;
 let commandIndex = { byName: new Map(), byId: new Map(), all: [] };
@@ -90,7 +102,11 @@ async function handleCommandExecution(command, { button = null, isStop = false }
   setBusy(!isStop);
 
   try {
-    const response = await api.request(ENDPOINTS.sendCommand(APP_CONFIG.vehicleId), {
+    if (!selectedVehicleId) {
+      ui.toast('Selecciona una unidad antes de enviar comandos.', 'error');
+      return false;
+    }
+    const response = await api.request(ENDPOINTS.sendCommand(selectedVehicleId), {
       method: 'POST',
       body: commandPayload(command, getConnectedFlag()),
       signal: controller.signal,
@@ -159,7 +175,7 @@ async function runSelectedDemo() {
 
   let payload;
   try {
-    payload = validateDemoPayload(demoId, APP_CONFIG.vehicleId);
+    payload = validateDemoPayload(demoId, selectedVehicleId);
   } catch (error) {
     ui.toast(error.message || 'La DEMO seleccionada no es válida.', 'error');
     return;
@@ -290,19 +306,20 @@ function setupControls() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopVehicle(); });
 }
 
-async function loadVehicleData() {
+async function loadVehicleData(vehicleId = selectedVehicleId) {
+  if (!vehicleId) return;
   const [vehicleResult, commandsResult, stateResult, demosResult] = await Promise.allSettled([
-    api.request(ENDPOINTS.vehicle(APP_CONFIG.vehicleId)),
-    api.request(ENDPOINTS.commands(APP_CONFIG.vehicleId)),
-    api.request(ENDPOINTS.state(APP_CONFIG.vehicleId)),
-    api.getDemos(APP_CONFIG.vehicleId),
+    api.request(ENDPOINTS.vehicle(vehicleId)),
+    api.request(ENDPOINTS.commands(vehicleId)),
+    api.request(ENDPOINTS.state(vehicleId)),
+    api.getDemos(vehicleId),
   ]);
   if (vehicleResult.status === 'fulfilled' && isRecord(vehicleResult.value)) {
     ui.setIdentity({ name: vehicleResult.value.nombre, id: vehicleResult.value.id_vehiculo, studentName: APP_CONFIG.studentName });
   }
   if (commandsResult.status === 'fulfilled' && validateCommandList(commandsResult.value)) {
     try {
-      commandIndex = indexActiveCommands(commandsResult.value, APP_CONFIG.vehicleId);
+      commandIndex = indexActiveCommands(commandsResult.value, vehicleId);
       monitoring.setCommandIndex(commandIndex);
       ui.setActionButtonsDisabled(false);
     } catch (error) { ui.toast(error.message, 'error'); }
@@ -332,7 +349,7 @@ function handleWsState({ state, detail }) {
 }
 
 function handleWsMessage(message) {
-  if (isRecord(message) && message.id_vehiculo !== undefined && Number(message.id_vehiculo) !== APP_CONFIG.vehicleId) return;
+  if (isRecord(message) && message.id_vehiculo !== undefined && Number(message.id_vehiculo) !== Number(selectedVehicleId)) return;
   if (isRecord(message) && typeof message.conectado === 'boolean') vehicleState = { ...vehicleState, conectado: message.conectado };
   if (
     isRecord(message)
@@ -358,6 +375,27 @@ function startWebSocket() {
     onMessage: handleWsMessage,
     onError: () => ui.toast('WebSocket WSS reportó un error; se intentará reconectar.', 'error'),
   });
+  if (selectedVehicleId) vehicleSession.connect();
+}
+
+async function selectVehicle(vehicleId) {
+  const nextVehicleId = Number(vehicleId);
+  if (!Number.isInteger(nextVehicleId) || nextVehicleId <= 0) {
+    selectedVehicleId = null;
+    vehicleSession.disconnect();
+    ui.setActionButtonsDisabled(true);
+    monitoring.setVehicle(0);
+    return;
+  }
+  if (selectedVehicleId === nextVehicleId) return;
+  cancelActionPulse();
+  if (selectedVehicleId) await stopVehicle();
+  vehicleSession.disconnect();
+  selectedVehicleId = nextVehicleId;
+  ui.setActionButtonsDisabled(true);
+  monitoring.setVehicle(selectedVehicleId);
+  ui.setIdentity({ id: selectedVehicleId, studentName: APP_CONFIG.studentName });
+  await loadVehicleData(selectedVehicleId);
   vehicleSession.connect();
 }
 
@@ -366,16 +404,72 @@ const navigation = new NavigationController({
   views: document.querySelectorAll('[data-view]'),
   skipLink: document.querySelector('.skip-link'),
 });
-const monitoring = new MonitoringController({ api, session: vehicleSession, vehicleId: APP_CONFIG.vehicleId });
+const monitoring = new MonitoringController({ api, session: vehicleSession, vehicleId: 0 });
+const admin = new AdminController({ api });
+let guestExperience;
+const ownerExperience = new OwnerExperience({
+  api,
+  onVehicleSelected: selectVehicle,
+  onCommandsChanged: (commands) => {
+    if (!selectedVehicleId || !validateCommandList(commands)) return;
+    commandIndex = indexActiveCommands(commands, selectedVehicleId);
+    monitoring.setCommandIndex(commandIndex);
+  },
+});
+const authUi = new AuthUI({
+  session: authSession,
+  api,
+  onAuthenticated: startAuthenticated,
+  onLogout: () => window.location.reload(),
+  onGuest: () => { void guestExperience?.open(); },
+});
 
-ui.setIdentity({ id: APP_CONFIG.vehicleId, studentName: APP_CONFIG.studentName });
-ui.setActionButtonsDisabled(true);
-ui.setStatus('ws', { state: 'checking', label: 'WSS…', detail: 'Abriendo sesión WSS real…' });
-ui.setStatus('api', { state: 'checking', label: 'API…', detail: 'Comprobando API…' });
-navigation.init();
-monitoring.init();
-setupControls();
-startWebSocket();
-startConnectivityMonitor({ api, ui });
-void checkRdsHealth(api, ui);
-void checkApiAndLoadData();
+guestExperience = new GuestExperience({
+  api,
+  session: authSession,
+  onAuthenticated: (profile) => { authUi.close(); startAuthenticated(profile); },
+});
+
+let applicationStarted = false;
+
+function startAuthenticated(profile) {
+  if (applicationStarted) return;
+  applicationStarted = true;
+  const roles = Array.isArray(profile?.roles) ? profile.roles : [];
+  if (roles.includes('INVITADO')) selectedVehicleId = authSession.getGuestVehicleId();
+  const allowedViews = roles.includes('ADMIN') ? ['control', 'monitor', 'admin'] : ['control', 'monitor'];
+  navigation.setAllowedViews(allowedViews);
+  authUi.renderProfile(profile);
+  admin.setVisible(roles.includes('ADMIN'));
+  admin.init();
+  ui.setIdentity({ id: selectedVehicleId || '—', studentName: APP_CONFIG.studentName });
+  ui.setActionButtonsDisabled(true);
+  ui.setStatus('ws', { state: 'checking', label: 'WSS…', detail: 'Abriendo sesión WSS real…' });
+  ui.setStatus('api', { state: 'checking', label: 'API…', detail: 'Comprobando API…' });
+  navigation.init();
+  monitoring.init({ load: false });
+  setupControls();
+  startWebSocket();
+  startConnectivityMonitor({ api, ui });
+  void checkRdsHealth(api, ui);
+  void checkApiHealth(api, ui, { notify: false });
+  if (roles.includes('USUARIO') || roles.includes('ADMIN')) ownerExperience.init(profile);
+  if (roles.includes('INVITADO') && selectedVehicleId) {
+    guestExperience.activate(authSession.tokens);
+    void loadVehicleData(selectedVehicleId);
+  }
+  if (roles.includes('ADMIN')) void admin.load();
+}
+
+authSession.addEventListener('expired', () => {
+  vehicleSession.disconnect();
+  ui.setActionButtonsDisabled(true);
+  window.location.reload();
+});
+
+authUi.init();
+guestExperience.init();
+void authUi.restore().then((restored) => {
+  if (restored) startAuthenticated(authSession.profile);
+  else authUi.open();
+});

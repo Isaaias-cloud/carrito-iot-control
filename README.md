@@ -2,10 +2,13 @@
 
 Frontend estático Mobile First para controlar y monitorear en tiempo real el vehículo `1`, identificado por la API como **Excavadora IoT**. El proyecto no contiene backend propio, no accede directamente a MySQL/RDS y está preparado para publicarse en GitHub Pages.
 
-La aplicación conserva dos vistas dentro del mismo documento:
+La aplicación conserva tres vistas dentro del mismo documento, todas detrás de la sesión emitida por FastAPI:
 
 - `#control`: joysticks, acciones manuales, `DETENER` y ejecución de DEMO.
 - `#monitor`: último movimiento reportado y los diez registros persistidos más recientes.
+- `#admin`: dashboard, modelos, unidades, clientes, asignaciones, demos/comandos y auditoría para el rol `ADMIN`.
+
+La autenticación usa `POST /auth/login`, renovación controlada con `POST /auth/refresh`, perfil mediante `GET /auth/me` y cierre con `POST /auth/logout`. Los tokens se conservan únicamente en `sessionStorage`; el backend sigue siendo la autoridad para autenticación, RBAC, propiedad, soporte y reservas.
 
 La navegación usa hash (`#control` / `#monitor`) y una única sesión WSS compartida por ambas vistas.
 
@@ -48,6 +51,15 @@ La navegación usa hash (`#control` / `#monitor`) y una única sesión WSS compa
 - Los pasos DEMO pueden actualizar la tarjeta, pero solo aparecen en la tabla si el historial REST los devuelve explícitamente.
 
 ### Estado y telemetría
+
+### Sesión y roles
+
+- La SPA permanece oculta hasta restaurar o iniciar sesión correctamente.
+- `ADMIN` puede abrir `ADMINISTRACIÓN`; `USUARIO` solo recibe `CONTROL` y `MONITOREO`.
+- La entrada visible «Modo invitado» queda preparada para la Etapa 7 y no crea una sesión ficticia.
+- Todas las peticiones protegidas llevan `Authorization: Bearer`; un `401` intenta una renovación una sola vez y luego solicita nuevo login.
+- El WSS recibe `?token=<access_token>` y se desconecta al expirar la sesión.
+- Un `403` de una unidad `VENDIDA` se muestra como error de autorización; la UI no intenta sustituir el consentimiento de soporte.
 
 El encabezado muestra tres indicadores independientes:
 
@@ -93,6 +105,11 @@ front-end/
     │   └── styles.css
     └── js/
         ├── app.js
+        ├── admin.js
+        ├── auth-session.js
+        ├── auth-ui.js
+        ├── owner-experience.js
+        ├── guest-experience.js
         ├── config.js
         ├── connectivity.js
         ├── domain.js
@@ -112,31 +129,41 @@ front-end/
 
 | Archivo | Responsabilidad |
 | --- | --- |
-| `index.html` | Shell semántico, vistas `CONTROL`/`MONITOREO`, IDs de UI, favicon, Bootstrap y módulo principal. |
-| `styles.css` | Tema visual, estados activos, toasts, layout responsive y adaptación a `100dvh`. |
-| `config.js` | URLs, vehículo, zona horaria, timeouts, intervalos y límites de reconexión. |
-| `app.js` | Orquestación de CONTROL, joysticks, teclado, botones, DEMO, pulso de acciones, telemetría WSS e inicialización. |
+| `index.html` | Shell semántico, vistas `CONTROL`/`MONITOREO`/`ADMINISTRACIÓN`, login, favicon, Bootstrap y módulo principal. |
+| `styles.css` | Tema visual, estados activos, toasts, layout responsive, autenticación, tablas y adaptación a `100dvh`. |
+| `config.js` | Detección local/producción, URLs, vehículo, zona horaria, timeouts e intervalos. `?env=local` fuerza el backend local. |
+| `app.js` | Orquestación autenticada de CONTROL, joysticks, DEMO, monitoreo, WSS y administración. |
+| `auth-session.js` | Tokens de sesión en `sessionStorage`, login, refresh, perfil y logout. |
+| `auth-ui.js` | Modal de login, identidad visible, rol, logout y acceso invitado preparado. |
+| `admin.js` | Dashboard y CRUD administrativos con `/admin/*`, comandos/demos por unidad y auditoría. |
+| `owner-experience.js` | Selector dinámico de unidades, soporte temporal y CRUD/ejecución de demos privadas. |
+| `guest-experience.js` | Catálogo público, reserva de exhibición, temporizador de 05:00 y finalización segura. |
 | `ui.js` | Render seguro de CONTROL, indicadores, botones activos, DEMO, toasts estándar y pasos DEMO. |
 | `domain.js` | Validación/indexación del catálogo, alias de comandos, payloads y reglas de DETENER. |
-| `rest-client.js` | `fetch`, timeout, `AbortController`, CORS, parseo JSON, errores HTTP e historial/RDS/DEMO. |
+| `rest-client.js` | `fetch`, timeout, `AbortController`, CORS, Bearer, refresh ante `401`, errores HTTP y endpoints REST. |
 | `connectivity.js` | Comprobación de API y RDS, más monitor periódico de conectividad. |
-| `navigation.js` | Cambio de vista por hash, `aria-current`, `hidden`, título y enlace de salto. |
+| `navigation.js` | Cambio de vista por hash, permisos visibles por rol, `aria-current`, `hidden`, título y enlace de salto. |
 | `monitoring.js` | Carga inicial, catálogo, último estado, historial, eventos WSS y sincronización REST. |
 | `monitoring-state.js` | Validación y normalización de estado REST y eventos WSS. |
 | `monitoring-ui.js` | Render seguro de tarjeta, fechas, estado WSS y tabla de historial. |
 | `history.js` | Validación, orden, deduplicación y límite de registros históricos. |
-| `vehicle-session.js` | Fachada compartida para suscriptores de mensajes, estados y errores WSS. |
+| `vehicle-session.js` | Fachada compartida para suscriptores de mensajes, estados, errores y cierre WSS. |
 | `websocket-service.js` | Apertura, recepción, cierre, errores y reconexión exponencial del WSS. |
 | `utils.js` | Validaciones, texto seguro, formateo de comandos/fechas, JSON y creación de elementos. |
 
 ## Configuración real
 
-Los valores actuales de `assets/js/config.js` son:
+`assets/js/config.js` detecta `localhost`/`127.0.0.1` y usa local automáticamente. En GitHub Pages usa producción. También puede forzarse local con `?env=local` o producción con `?env=production`:
 
 ```js
-apiBaseUrl: 'https://api-iot-26.duckdns.org'
-websocketUrl: 'wss://api-iot-26.duckdns.org/ws/vehiculo/1'
-vehicleId: 1
+local: {
+  apiBaseUrl: 'http://127.0.0.1:8000',
+  websocketBaseUrl: 'ws://127.0.0.1:8000'
+}
+production: {
+  apiBaseUrl: 'https://api-iot-26.duckdns.org',
+  websocketBaseUrl: 'wss://api-iot-26.duckdns.org'
+}
 studentName: 'Isaaias Arrieta Prado'
 displayTimeZone: 'America/Mexico_City'
 requestTimeoutMs: 10000
@@ -146,12 +173,16 @@ websocketReconnectBaseMs: 1000
 websocketReconnectMaxMs: 15000
 ```
 
-El frontend no contiene tokens, claves AWS, credenciales MySQL ni encabezados de autorización. `RestClient` usa `mode: 'cors'` y `credentials: 'omit'`; cualquier autenticación adicional debe ser definida por el backend antes de incorporarse.
+El frontend no contiene secretos, claves AWS ni credenciales MySQL. Los tokens de sesión se guardan temporalmente en `sessionStorage`, se envían como Bearer y no sustituyen la autorización aplicada por FastAPI.
 
 ## Endpoints REST consumidos
 
 | Método | Ruta | Uso |
 | --- | --- | --- |
+| `POST` | `/auth/login` | Inicio de sesión. |
+| `POST` | `/auth/refresh` | Renovación del access token. |
+| `POST` | `/auth/logout` | Revocación de sesión. |
+| `GET` | `/auth/me` | Perfil y roles actuales. |
 | `GET` | `/` | Salud de la API; se espera `status: ok`. |
 | `GET` | `/health/db` | Diagnóstico RDS; se espera `status: ok`, `rds: connected`, `database: mysql`. |
 | `GET` | `/vehiculos/{id}` | Nombre e identidad del vehículo. |
@@ -161,6 +192,12 @@ El frontend no contiene tokens, claves AWS, credenciales MySQL ni encabezados de
 | `GET` | `/demos/vehiculo/{id}` | Catálogo de DEMOs. |
 | `POST` | `/vehiculos/{id}/comando` | Envío de comandos manuales y `DETENER`. |
 | `POST` | `/demos/ejecutar` | Inicio de una DEMO. |
+
+La vista ADMINISTRACIÓN consume `GET/POST /admin/modelos`, `/admin/unidades`, `/admin/clientes`, `/admin/asignaciones`, `POST /admin/asignaciones/{id}/revocar`, `GET /admin/dashboard` y `GET /admin/auditoria`. Los comandos y demos se consultan por la unidad seleccionada mediante los endpoints existentes `/comandos/vehiculo/{id}` y `/demos/vehiculo/{id}`; si una unidad vendida requiere consentimiento de soporte, la API devuelve `403` y la interfaz lo comunica.
+
+La experiencia del propietario consume `GET /me/vehiculos`, `GET /me/soporte/admins`, `GET/POST /me/vehiculos/{id}/soporte`, `DELETE /me/vehiculos/{id}/soporte/{id_autorizacion}`, además de `GET/POST/PUT/DELETE /me/demos` y sus rutas de movimientos. El selector nunca usa un vehículo fijo; al cambiarlo se recargan estado, historial, comandos y WSS.
+
+El modo invitado consume `GET /invitado/vehiculos`, `POST /invitado/sesion` y `POST /invitado/sesion/finalizar`. Solo se muestran unidades `EXHIBICION`; la reserva bloquea el selector a una unidad durante 05:00 y permite únicamente control, monitoreo y demos de empresa.
 
 ### Payloads usados
 
@@ -241,18 +278,30 @@ Los mensajes WSS se reciben como JSON cuando el backend los publica. El frontend
 
 ## Ejecución local
 
-Los módulos ES no deben abrirse con `file://`. Desde la raíz del proyecto:
+Los módulos ES no deben abrirse con `file://`. Desde la carpeta `front-end`:
 
 ```bash
 python -m http.server 5500
 ```
 
-Después abre:
+Con el backend de Etapa 6 ejecutándose en otra terminal (`python-apis`):
+
+```powershell
+cd ..\python-apis
+Copy-Item .env.example .env
+# Completa .env con las credenciales RDS y JWT_SECRET requeridas por el backend.
+uvicorn app.main:app --reload --port 8000
+```
+
+En una segunda terminal, dentro de `front-end`, abre:
 
 ```text
-http://localhost:5500/#control
-http://localhost:5500/#monitor
+http://localhost:5500/?env=local#control
+http://localhost:5500/?env=local#monitor
+http://localhost:5500/?env=local#admin
 ```
+
+Inicia sesión con el `ADMIN` creado mediante `python -m app.scripts.create_admin` y prueba con un `USUARIO` propietario. Verifica selector vacío, cambio entre unidades, soporte de 30 minutos, revocación, creación de demo, límites de 100 pasos/300000 ms, aislamiento entre usuarios y ejecución con `DETENER`. También puede probar producción en `https://isaaias-cloud.github.io/carrito-iot-control/`.
 
 También puede utilizarse Live Server de VS Code. El backend debe permitir CORS para el origen local y para la URL final de GitHub Pages. CORS no constituye autenticación.
 
@@ -272,16 +321,23 @@ git diff --check
 
 Pruebas funcionales recomendadas:
 
-1. Carga de `#control` y `#monitor`.
-2. Joysticks táctiles/puntero y teclado; confirmar `DETENER` al liberar.
-3. Botones centrales: estado `.is-active`, exclusión de `Apagar`, pulso de 500 ms y paro automático.
-4. DEMO: verificar notificación WSS paso/total, comando y progreso.
-5. Cinco toasts estándar: solo deben quedar tres; `.demo-step-toast` no cuenta para el límite.
-6. Carga de estado e historial; confirmar máximo diez filas y nombres legibles.
-7. Evento WSS desde otra pestaña o cliente independiente.
-8. Pérdida/reconexión WSS y sincronización REST.
-9. Estados independientes de API, RDS y WSS.
-10. Pruebas en escritorio, móvil portrait y móvil landscape, incluyendo footer y créditos.
+1. Login válido/inválido, restauración de sesión, refresh ante `401` y logout.
+2. Carga de `#control`, `#monitor` y `#admin` según el rol.
+3. Dashboard ADMIN con métricas reales y estados de inventario.
+4. Alta de modelo, unidad, cliente, asignación y revocación; validar mensajes `409`/`422`.
+5. Consulta de comandos/demos por unidad y mensaje `403` cuando falta soporte.
+6. Selector `Mis vehículos`, recarga de estado/historial/comandos y reconexión WSS aislada.
+7. Soporte: autorización, contador, expiración y revocación.
+8. Demos privadas: alta, edición, pasos, eliminación, ejecución y rechazo de comando no permitido.
+9. Invitado: catálogo `EXHIBICION`, reserva exclusiva, temporizador 05:00, finalización y liberación por cierre/expiración.
+10. Invitado bloqueado en `/me/*`, `/admin/*`, demos privadas y otras unidades.
+11. Auditoría paginada/filtrable y estados vacíos.
+12. Joysticks táctiles/puntero y teclado; confirmar `DETENER` al liberar.
+13. Botones centrales: estado `.is-active`, exclusión de `Apagar`, pulso de 500 ms y paro automático.
+14. DEMO: verificar notificación WSS paso/total, comando y progreso.
+15. Cinco toasts estándar: solo deben quedar tres; `.demo-step-toast` no cuenta para el límite.
+16. Carga de estado e historial; confirmar máximo diez filas y nombres legibles.
+17. Pérdida/reconexión WSS, estados API/RDS/WSS y pruebas mobile first.
 
 ## Publicación en GitHub Pages
 
@@ -295,7 +351,7 @@ Pruebas funcionales recomendadas:
 ## Limitaciones y seguridad
 
 - No hay conexión directa del navegador con RDS.
-- No hay administración, CRUD, tablas nuevas ni procedimientos almacenados en este repositorio.
+- La administración se limita a los endpoints publicados por FastAPI; comandos y demos se consultan por las rutas legacy protegidas y no se duplican datos en el navegador.
 - No hay integración física confirmable con ESP8266/ESP32 desde el frontend actual.
 - El backend no expone una operación de cancelación de DEMO en el contrato documentado; `DETENER` es un comando de paro, no una confirmación de cancelación de secuencia.
 - Un HTTP 2xx demuestra aceptación de la API, y un evento WSS demuestra publicación; ninguno demuestra por sí solo ejecución física.

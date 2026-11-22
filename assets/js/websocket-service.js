@@ -2,11 +2,12 @@ import { APP_CONFIG } from './config.js';
 import { parseJsonMessage } from './utils.js';
 
 export class VehicleWebSocket {
-  constructor({ url, onStateChange, onMessage, onError } = {}) {
+  constructor({ url, onStateChange, onMessage, onError, onAuthFailure } = {}) {
     this.url = url;
     this.onStateChange = onStateChange;
     this.onMessage = onMessage;
     this.onError = onError;
+    this.onAuthFailure = onAuthFailure;
     this.socket = null;
     this.closedByUser = false;
     this.reconnectAttempt = 0;
@@ -18,7 +19,9 @@ export class VehicleWebSocket {
     this.clearReconnectTimer();
     this.setState('connecting', 'Conectando…');
     try {
-      this.socket = new WebSocket(this.url);
+      const resolvedUrl = typeof this.url === 'function' ? this.url() : this.url;
+      if (!resolvedUrl) throw new Error('No hay sesión válida para abrir WSS.');
+      this.socket = new WebSocket(resolvedUrl);
       this.socket.addEventListener('open', () => {
         this.reconnectAttempt = 0;
         this.setState('online', 'En línea');
@@ -28,8 +31,9 @@ export class VehicleWebSocket {
         this.onError?.(event);
         this.setState('disconnected', 'Error de conexión');
       });
-      this.socket.addEventListener('close', () => {
+      this.socket.addEventListener('close', (event) => {
         this.socket = null;
+        if ([4401, 4403].includes(event.code)) this.onAuthFailure?.(event.code);
         if (this.closedByUser) {
           this.setState('disconnected', 'Desconectado');
           return;
