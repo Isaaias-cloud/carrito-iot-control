@@ -56,7 +56,7 @@ La navegación usa hash (`#control` / `#monitor`) y una única sesión WSS compa
 
 - La SPA permanece oculta hasta restaurar o iniciar sesión correctamente.
 - `ADMIN` puede abrir `ADMINISTRACIÓN`; `USUARIO` solo recibe `CONTROL` y `MONITOREO`.
-- La entrada visible «Modo invitado» queda preparada para la Etapa 7 y no crea una sesión ficticia.
+- La entrada visible «Modo invitado» está implementada en la Etapa 7 mediante `guest-experience.js`: crea reservas reales de 5 minutos con `GET /invitado/vehiculos`, `POST /invitado/sesion` y `POST /invitado/sesion/finalizar`.
 - Todas las peticiones protegidas llevan `Authorization: Bearer`; un `401` intenta una renovación una sola vez y luego solicita nuevo login.
 - El WSS recibe `?token=<access_token>` y se desconecta al expirar la sesión.
 - Un `403` de una unidad `VENDIDA` se muestra como error de autorización; la UI no intenta sustituir el consentimiento de soporte.
@@ -193,7 +193,7 @@ El frontend no contiene secretos, claves AWS ni credenciales MySQL. Los tokens d
 | `POST` | `/vehiculos/{id}/comando` | Envío de comandos manuales y `DETENER`. |
 | `POST` | `/demos/ejecutar` | Inicio de una DEMO. |
 
-La vista ADMINISTRACIÓN consume `GET/POST /admin/modelos`, `/admin/unidades`, `/admin/clientes`, `/admin/asignaciones`, `POST /admin/asignaciones/{id}/revocar`, `GET /admin/dashboard` y `GET /admin/auditoria`. Los comandos y demos se consultan por la unidad seleccionada mediante los endpoints existentes `/comandos/vehiculo/{id}` y `/demos/vehiculo/{id}`; si una unidad vendida requiere consentimiento de soporte, la API devuelve `403` y la interfaz lo comunica.
+La vista ADMINISTRACIÓN consume `GET/POST /admin/modelos`, `PATCH /admin/modelos/{id}/comandos/{id}` (capacidades por modelo), `/admin/unidades`, `/admin/clientes`, `/admin/asignaciones`, `POST /admin/asignaciones/{id}/revocar`, `GET /admin/dashboard` y `GET /admin/auditoria`. Los comandos y demos se consultan por la unidad seleccionada mediante los endpoints existentes `/comandos/vehiculo/{id}` y `/demos/vehiculo/{id}`; si una unidad vendida requiere consentimiento de soporte, la API devuelve `403` y la interfaz lo comunica.
 
 La experiencia del propietario consume `GET /me/vehiculos`, `GET /me/soporte/admins`, `GET/POST /me/vehiculos/{id}/soporte`, `DELETE /me/vehiculos/{id}/soporte/{id_autorizacion}`, además de `GET/POST/PUT/DELETE /me/demos` y sus rutas de movimientos. El selector nunca usa un vehículo fijo; al cambiarlo se recargan estado, historial, comandos y WSS.
 
@@ -353,7 +353,7 @@ Pruebas funcionales recomendadas:
 - No hay conexión directa del navegador con RDS.
 - La administración se limita a los endpoints publicados por FastAPI; comandos y demos se consultan por las rutas legacy protegidas y no se duplican datos en el navegador.
 - No hay integración física confirmable con ESP8266/ESP32 desde el frontend actual.
-- El backend no expone una operación de cancelación de DEMO en el contrato documentado; `DETENER` es un comando de paro, no una confirmación de cancelación de secuencia.
+- No existe un endpoint REST dedicado de cancelación de DEMO, pero `DETENER` (`codigo = 0`) sí cancela inmediatamente cualquier demo activa en el backend: `cancel_demo()` señala un `asyncio.Event` y la ejecución en `demo_execution.py` aborta la secuencia durante `duracion_ms` o `pausa_ms`.
 - Un HTTP 2xx demuestra aceptación de la API, y un evento WSS demuestra publicación; ninguno demuestra por sí solo ejecución física.
 - La URL final de GitHub Pages y su autorización CORS deben comprobarse antes de publicar.
 - Los endpoints externos y su disponibilidad pueden cambiar; este README documenta el contrato observado y la integración presente en el código.
