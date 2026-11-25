@@ -91,6 +91,7 @@ export class AuthUI {
     if (this.userName) this.userName.textContent = profile?.nombre || profile?.email || 'Sesión activa';
     if (this.userRole) this.userRole.textContent = roles.join(' · ') || 'SIN ROL';
     document.body.dataset.role = roles[0] || 'UNKNOWN';
+    this.guestButtons.forEach((button) => { button.hidden = true; });
     document.querySelectorAll('[data-role="ADMIN"]').forEach((element) => {
       element.hidden = !roles.includes('ADMIN');
     });
