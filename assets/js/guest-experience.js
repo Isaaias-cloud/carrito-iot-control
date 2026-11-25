@@ -2,6 +2,14 @@ import { ApiError } from './rest-client.js';
 
 function items(value) { return Array.isArray(value) ? value : []; }
 
+function parseUtcDate(value) {
+  if (!value) return new Date(NaN);
+  if (value instanceof Date) return value;
+  const raw = String(value).trim();
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  return new Date(hasTimezone ? raw : `${raw.replace(' ', 'T')}Z`);
+}
+
 export class GuestExperience {
   constructor({ api, session, onAuthenticated } = {}) {
     this.api = api;
@@ -39,7 +47,7 @@ export class GuestExperience {
       const card = document.createElement('article'); card.className = 'guest-vehicle-card';
       const title = document.createElement('h3'); title.textContent = vehicle.vehiculo_nombre; card.append(title);
       const detail = document.createElement('p'); detail.textContent = `${vehicle.identificador_unico} · ${vehicle.modelo_nombre}`; card.append(detail);
-      const state = document.createElement('span'); state.className = `guest-state guest-state--${String(vehicle.estado).toLowerCase()}`; state.textContent = vehicle.estado === 'DISPONIBLE' ? 'Disponible' : `Ocupada${vehicle.libera_en ? ` · libera ${new Date(vehicle.libera_en).toLocaleTimeString('es-MX')}` : ''}`; card.append(state);
+      const state = document.createElement('span'); state.className = `guest-state guest-state--${String(vehicle.estado).toLowerCase()}`; state.textContent = vehicle.estado === 'DISPONIBLE' ? 'Disponible' : `Ocupada${vehicle.libera_en ? ` · libera ${parseUtcDate(vehicle.libera_en).toLocaleTimeString('es-MX')}` : ''}`; card.append(state);
       if (vehicle.estado === 'DISPONIBLE') { const button = document.createElement('button'); button.className = 'btn btn-sm btn-primary'; button.type = 'button'; button.textContent = 'Reservar 5 minutos'; button.addEventListener('click', () => { void this.reserve(vehicle.id_vehiculo, button); }); card.append(button); }
       this.catalog.append(card);
     });
@@ -70,7 +78,7 @@ export class GuestExperience {
 
   updateTimer() {
     const expiry = this.sessionData?.expira_en || this.session.tokens?.expira_en;
-    const seconds = Math.max(0, Math.floor((new Date(expiry).getTime() - Date.now()) / 1000));
+    const seconds = Math.max(0, Math.floor((parseUtcDate(expiry).getTime() - Date.now()) / 1000));
     if (this.timer) this.timer.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
     if (seconds <= 0) { this.setMessage('La sesión de exhibición terminó y la unidad fue liberada.', 'info'); void this.finish({ expired: true }); }
   }

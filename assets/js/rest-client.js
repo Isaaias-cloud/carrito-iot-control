@@ -52,7 +52,7 @@ export class RestClient {
       });
       const payload = await this.parseResponse(response);
       if (!response.ok) {
-        if (auth && this.authSession?.isGuest?.() && [401, 403].includes(response.status)) {
+        if (auth && this.authSession?.isGuest?.() && response.status === 401) {
           this.authSession.clear();
         }
         if (response.status === 401 && auth && retryAuth && this.authSession?.getRefreshToken()) {

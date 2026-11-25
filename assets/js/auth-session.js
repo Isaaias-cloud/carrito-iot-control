@@ -9,6 +9,14 @@ function safeParse(value) {
   }
 }
 
+function parseUtcDate(value) {
+  if (!value) return new Date(NaN);
+  if (value instanceof Date) return value;
+  const raw = String(value).trim();
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  return new Date(hasTimezone ? raw : `${raw.replace(' ', 'T')}Z`);
+}
+
 export class AuthSession extends EventTarget {
   constructor({ storage = globalThis.sessionStorage } = {}) {
     super();
@@ -24,7 +32,7 @@ export class AuthSession extends EventTarget {
       this.clear({ silent: true });
       return false;
     }
-    if (parsed.guest && parsed.expira_en && new Date(parsed.expira_en).getTime() <= Date.now()) {
+    if (parsed.guest && parsed.expira_en && parseUtcDate(parsed.expira_en).getTime() <= Date.now()) {
       this.clear({ silent: true });
       return false;
     }
