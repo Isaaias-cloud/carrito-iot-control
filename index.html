@@ -318,6 +318,23 @@
           </form>
           <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Comandos permitidos</caption><thead><tr><th>ID</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="admin-commands-body"></tbody></table></div>
           <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Demos empresariales</caption><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Estado</th></tr></thead><tbody id="admin-demos-body"></tbody></table></div>
+          <div class="admin-demo-steps" data-role="ADMIN">
+            <div class="admin-section__heading"><h4 id="admin-demo-steps-heading">Movimientos de la demo</h4><span>Solo ADMIN · requiere unidad y demo seleccionadas</span></div>
+            <p class="admin-status" id="admin-demo-step-message" role="status" aria-live="polite"></p>
+            <label class="admin-inline-label">Demo
+              <select id="admin-demo-select" aria-label="Seleccionar demo para agregar movimientos">
+                <option value="">Selecciona una demo</option>
+              </select>
+            </label>
+            <form class="admin-form-grid" id="admin-demo-step-form">
+              <label>Orden<input name="orden" type="number" min="1" value="1" required /></label>
+              <label>Comando<select name="id_comando" aria-label="Comando permitido para la unidad" required><option value="">Selecciona comando</option></select></label>
+              <label>Duración ms<input name="duracion_ms" type="number" min="0" max="86400000" value="500" required /></label>
+              <label>Pausa ms<input name="pausa_ms" type="number" min="0" max="86400000" value="0" required /></label>
+              <button class="btn btn-primary" id="admin-demo-step-submit" type="submit">Agregar movimiento</button>
+            </form>
+            <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Movimientos de la demo seleccionada</caption><thead><tr><th>ID</th><th>Orden</th><th>Comando</th><th>Código</th><th>Duración ms</th><th>Pausa ms</th></tr></thead><tbody id="admin-demo-steps-body"></tbody></table></div>
+          </div>
         </section>
 
         <section class="admin-section" aria-labelledby="admin-audit-heading">

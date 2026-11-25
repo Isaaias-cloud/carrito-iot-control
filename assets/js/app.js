@@ -374,7 +374,7 @@ const navigation = new NavigationController({
   skipLink: document.querySelector('.skip-link'),
 });
 const monitoring = new MonitoringController({ api, session: vehicleSession, vehicleId: 0 });
-const admin = new AdminController({ api });
+const admin = new AdminController({ api, session: authSession });
 let guestExperience;
 const ownerExperience = new OwnerExperience({
   api,

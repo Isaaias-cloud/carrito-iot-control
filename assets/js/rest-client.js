@@ -87,6 +87,14 @@ export class RestClient {
     return this.request(`/demos/vehiculo/${encodeURIComponent(Number(vehicleId))}`);
   }
 
+  async getDemoMovements(id) {
+    return this.request(ENDPOINTS.demoMovements(id));
+  }
+
+  async createDemoMovement(body) {
+    return this.request(ENDPOINTS.demoMovement(), { method: 'POST', body });
+  }
+
   async executeDemo(payload) {
     return this.request('/demos/ejecutar', {
       method: 'POST',
