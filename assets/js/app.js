@@ -36,19 +36,6 @@ const joystickState = {
   right: { pointerId: null, direction: 'neutral' },
 };
 
-const KEY_BINDINGS = Object.freeze({
-  w: { joystick: 'left', direction: 'up' },
-  a: { joystick: 'left', direction: 'left' },
-  s: { joystick: 'left', direction: 'down' },
-  d: { joystick: 'left', direction: 'right' },
-  ArrowUp: { joystick: 'right', direction: 'up' },
-  ArrowLeft: { joystick: 'right', direction: 'left' },
-  ArrowDown: { joystick: 'right', direction: 'down' },
-  ArrowRight: { joystick: 'right', direction: 'right' },
-});
-
-const keyboardDirections = { left: new Set(), right: new Set() };
-
 function getConnectedFlag() {
   return typeof vehicleState.conectado === 'boolean' ? vehicleState.conectado : true;
 }
@@ -136,8 +123,6 @@ async function handleCommandExecution(command, { button = null, isStop = false }
 async function stopVehicle() {
   cancelActionPulse();
   ui.clearDemoMovement();
-  keyboardDirections.left.clear();
-  keyboardDirections.right.clear();
   for (const joystick of ['left', 'right']) {
     joystickState[joystick].direction = 'neutral';
     resetJoystickVisual(joystick);
@@ -273,29 +258,9 @@ function setupPointerJoystick(joystick) {
   element.addEventListener('lostpointercapture', (event) => releaseJoystick(joystick, event.pointerId));
 }
 
-function setupKeyboard() {
-  document.addEventListener('keydown', (event) => {
-    const binding = KEY_BINDINGS[event.key.toLowerCase()] || KEY_BINDINGS[event.key];
-    if (!binding || event.repeat) return;
-    event.preventDefault();
-    keyboardDirections[binding.joystick].add(binding.direction);
-    applyJoystickDirection(binding.joystick, binding.direction);
-  });
-  document.addEventListener('keyup', (event) => {
-    const binding = KEY_BINDINGS[event.key.toLowerCase()] || KEY_BINDINGS[event.key];
-    if (!binding) return;
-    event.preventDefault();
-    const activeDirections = keyboardDirections[binding.joystick];
-    activeDirections.delete(binding.direction);
-    if (activeDirections.size === 0) releaseJoystick(binding.joystick);
-    else applyJoystickDirection(binding.joystick, [...activeDirections].at(-1));
-  });
-}
-
 function setupControls() {
   setupPointerJoystick('left');
   setupPointerJoystick('right');
-  setupKeyboard();
   ui.stopButton?.addEventListener('click', () => stopVehicle());
   ui.demoSelect?.addEventListener('change', () => ui.setDemoSelectionReady(Boolean(ui.demoSelect.value)));
   ui.runDemoButton?.addEventListener('click', () => { void runSelectedDemo(); });
