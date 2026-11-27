@@ -1,5 +1,6 @@
 import { APP_CONFIG, ENDPOINTS } from './config.js';
 import { isRecord } from './utils.js';
+import { showError } from './error-alerts.js';
 
 export async function fetchWithTimeout(url, { timeoutMs = APP_CONFIG.requestTimeoutMs, signal, ...options } = {}) {
   const controller = new AbortController();
@@ -67,11 +68,22 @@ export class RestClient {
       }
       return payload;
     } catch (error) {
-      if (error instanceof ApiError) throw error;
-      if (error?.name === 'AbortError') {
-        throw new ApiError('La solicitud tardó demasiado o fue cancelada.', { cause: error });
+      let normalizado = error;
+      if (!(error instanceof ApiError)) {
+        if (error?.name === 'AbortError') {
+          normalizado = new ApiError('La solicitud tardó demasiado o fue cancelada.', { cause: error });
+        } else {
+          normalizado = new ApiError(
+            'No se pudo contactar al servidor. Revisa tu conexión y la configuración CORS.',
+            { cause: error },
+          );
+        }
       }
-      throw new ApiError('No se pudo contactar al servidor. Revisa la red y CORS del origen de GitHub Pages.', { cause: error });
+      if (!normalizado.__alerted) {
+        showError(normalizado, `${method} ${path}`);
+        normalizado.__alerted = true;
+      }
+      throw normalizado;
     }
   }
 
@@ -85,6 +97,29 @@ export class RestClient {
 
   async getDemos(vehicleId) {
     return this.request(`/demos/vehiculo/${encodeURIComponent(Number(vehicleId))}`);
+  }
+
+  async getMovimientos(vehicleId) {
+    return this.request(ENDPOINTS.movimientos(vehicleId));
+  }
+
+  async createMovimiento(body) {
+    return this.request(ENDPOINTS.movimientoCreate(), { method: 'POST', body });
+  }
+
+  async updateMovimiento(id, body) {
+    return this.request(ENDPOINTS.movimiento(id), { method: 'PUT', body });
+  }
+
+  async deleteMovimiento(id) {
+    return this.request(ENDPOINTS.movimiento(id), { method: 'DELETE' });
+  }
+
+  async executeMovimiento(id) {
+    return this.request(ENDPOINTS.movimientoEjecutar(), {
+      method: 'POST',
+      body: { id_movimiento: Number(id) },
+    });
   }
 
   async executeDemo(payload) {

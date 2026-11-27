@@ -19,6 +19,8 @@
   <body class="gamepad-body">
     <a class="skip-link" href="#main-content">Saltar al contenido</a>
 
+    <div class="global-alert" id="global-alert" role="alert" aria-live="assertive" aria-atomic="true" hidden></div>
+
     <div class="gamepad-wrapper" data-auth-only hidden>
       <!-- Barra superior compacta -->
       <header class="gamepad-header">
@@ -159,6 +161,18 @@
               <option value="">Cargando DEMOs...</option>
             </select>
             <button class="btn-gamepad btn-gamepad--demo" id="btn-run-demo" type="button" disabled title="Ejecutar DEMO seleccionada">
+              <span aria-hidden="true">▶</span>
+              <span class="btn-label-inline">Ejecutar</span>
+            </button>
+          </div>
+
+          <!-- Control de MOVIMIENTOS puntuales (duracion y auto-paro en backend) -->
+          <div class="demo-wrapper" id="movimiento-wrapper">
+            <label for="movimiento-select" class="visually-hidden">Seleccionar movimiento</label>
+            <select class="form-select form-select-sm demo-select" id="movimiento-select" disabled>
+              <option value="">Cargando movimientos...</option>
+            </select>
+            <button class="btn-gamepad btn-gamepad--demo" id="btn-run-movimiento" type="button" disabled title="Ejecutar movimiento seleccionado">
               <span aria-hidden="true">▶</span>
               <span class="btn-label-inline">Ejecutar</span>
             </button>
@@ -318,6 +332,17 @@
             <button class="btn btn-primary" type="submit">Agregar comando</button>
           </form>
           <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Comandos permitidos</caption><thead><tr><th>ID</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="admin-commands-body"></tbody></table></div>
+          <div class="admin-movimientos" data-role="ADMIN">
+            <div class="admin-section__heading"><h4 id="admin-movimientos-heading">Movimientos puntuales</h4><span>Solo ADMIN · códigos 0-13 (7 reservado para el firmware)</span></div>
+            <p class="admin-status" id="admin-movimiento-message" role="status" aria-live="polite"></p>
+            <form class="admin-form-grid" id="admin-movimiento-form">
+              <label>Comando<select id="admin-movimiento-comando" name="id_comando" aria-label="Comando del movimiento" required><option value="">Selecciona comando</option></select></label>
+              <label>Nombre<input name="nombre" required maxlength="100" /></label>
+              <label>Duración ms<input name="duracion_ms" type="number" min="1" max="86400000" value="1000" required /></label>
+              <button class="btn btn-primary" id="admin-movimiento-submit" type="submit">Crear movimiento</button>
+            </form>
+            <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Movimientos puntuales</caption><thead><tr><th>ID</th><th>Nombre</th><th>Comando</th><th>Código</th><th>Duración ms</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="admin-movimientos-body"></tbody></table></div>
+          </div>
           <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Demos empresariales</caption><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Estado</th></tr></thead><tbody id="admin-demos-body"></tbody></table></div>
         </section>
 

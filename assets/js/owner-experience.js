@@ -1,5 +1,6 @@
 import { ApiError } from './rest-client.js';
 import { ENDPOINTS } from './config.js';
+import { formatError, showAlert } from './error-alerts.js';
 
 function listValue(value) { return Array.isArray(value) ? value : []; }
 function field(form, name) { return form.elements.namedItem(name)?.value?.trim() || ''; }
@@ -255,7 +256,13 @@ export class OwnerExperience {
     catch (error) { this.setMessage(this.errorMessage(error), 'error'); }
   }
 
-  setMessage(message, state = 'info') { if (this.message) { this.message.textContent = message; this.message.dataset.state = state; } }
-  setSupportMessage(message, state = 'info') { if (this.supportMessage) { this.supportMessage.textContent = message; this.supportMessage.dataset.state = state; } }
-  errorMessage(error) { return error instanceof ApiError ? `${error.status || 'Error'}: ${error.message}` : error?.message || 'No se pudo completar la operación.'; }
+  setMessage(message, state = 'info') {
+    if (this.message) { this.message.textContent = message; this.message.dataset.state = state; }
+    if (state === 'error') showAlert(message, 'error', { mirror: true });
+  }
+  setSupportMessage(message, state = 'info') {
+    if (this.supportMessage) { this.supportMessage.textContent = message; this.supportMessage.dataset.state = state; }
+    if (state === 'error') showAlert(message, 'error', { mirror: true });
+  }
+  errorMessage(error) { return error instanceof ApiError ? formatError(error, 'Mis vehículos') : error?.message || 'No se pudo completar la operación.'; }
 }

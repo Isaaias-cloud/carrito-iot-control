@@ -1,4 +1,5 @@
 import { formatCommandLabel, formatDateParts, safeText } from './utils.js';
+import { showAlert } from './error-alerts.js';
 
 export class MonitoringUI {
   constructor() {
@@ -42,6 +43,7 @@ export class MonitoringUI {
   }
 
   setLatestUnavailable(message, state = 'error') {
+    if (state === 'error') showAlert(message, 'error', { mirror: true });
     if (this.latestCard) this.latestCard.dataset.state = state;
     if (this.latestCommand) this.latestCommand.textContent = state === 'disconnected' ? 'Desconectado' : state === 'empty' ? 'Sin movimientos' : 'Error';
     if (this.latestCode) this.latestCode.hidden = true;
@@ -77,6 +79,7 @@ export class MonitoringUI {
   }
 
   setHistoryError(message) {
+    showAlert(`Historial: ${safeText(message, 'No se pudo consultar el historial.')}`, 'error', { mirror: true });
     if (!this.historyMessage) return;
     this.historyMessage.hidden = false;
     this.historyMessage.dataset.state = 'error';

@@ -189,6 +189,27 @@ async function runSelectedDemo() {
   }
 }
 
+async function runSelectedMovimiento() {
+  if (!selectedVehicleId) {
+    ui.toast('Selecciona una unidad antes de ejecutar movimientos.', 'error');
+    return;
+  }
+  const movimientoId = ui.movimientoSelect?.value;
+  if (!movimientoId) {
+    ui.toast('Selecciona un movimiento antes de ejecutarlo.', 'error');
+    return;
+  }
+  try {
+    const response = await api.executeMovimiento(movimientoId);
+    ui.toast(
+      `${safeText(response?.codigo, '?')} ejecutado · ${safeText(response?.duracion_ms, '?')} ms · paro automático programado`,
+      'success',
+    );
+  } catch (error) {
+    ui.toast(error?.message || 'No se pudo ejecutar el movimiento.', 'error');
+  }
+}
+
 async function applyJoystickDirection(joystick, direction) {
   cancelActionPulse();
   const state = joystickState[joystick];
@@ -264,6 +285,8 @@ function setupControls() {
   ui.stopButton?.addEventListener('click', () => stopVehicle());
   ui.demoSelect?.addEventListener('change', () => ui.setDemoSelectionReady(Boolean(ui.demoSelect.value)));
   ui.runDemoButton?.addEventListener('click', () => { void runSelectedDemo(); });
+  ui.movimientoSelect?.addEventListener('change', () => ui.setMovimientoSelectionReady(Boolean(ui.movimientoSelect.value)));
+  ui.runMovimientoButton?.addEventListener('click', () => { void runSelectedMovimiento(); });
   Object.entries(ui.actionButtons).forEach(([action, button]) => {
     button?.addEventListener('click', () => { void handleCenterActionClick(action); });
   });
@@ -273,11 +296,12 @@ function setupControls() {
 
 async function loadVehicleData(vehicleId = selectedVehicleId) {
   if (!vehicleId) return;
-  const [vehicleResult, commandsResult, stateResult, demosResult] = await Promise.allSettled([
+  const [vehicleResult, commandsResult, stateResult, demosResult, movimientosResult] = await Promise.allSettled([
     api.request(ENDPOINTS.vehicle(vehicleId)),
     api.request(ENDPOINTS.commands(vehicleId)),
     api.request(ENDPOINTS.state(vehicleId)),
     api.getDemos(vehicleId),
+    api.getMovimientos(vehicleId),
   ]);
   if (vehicleResult.status === 'fulfilled' && isRecord(vehicleResult.value)) {
     ui.setIdentity({ name: vehicleResult.value.nombre, id: vehicleResult.value.id_vehiculo, studentName: APP_CONFIG.studentName });
@@ -297,6 +321,11 @@ async function loadVehicleData(vehicleId = selectedVehicleId) {
   } else {
     ui.renderDemoOptions([]);
     ui.toast('No se pudo cargar el catálogo de DEMOs.', 'error');
+  }
+  if (movimientosResult.status === 'fulfilled' && Array.isArray(movimientosResult.value)) {
+    ui.renderMovimientoOptions(movimientosResult.value);
+  } else {
+    ui.renderMovimientoOptions([]);
   }
 }
 

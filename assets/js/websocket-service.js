@@ -1,5 +1,6 @@
 import { APP_CONFIG } from './config.js';
 import { parseJsonMessage } from './utils.js';
+import { showAlert, formatWsClose } from './error-alerts.js';
 
 export class VehicleWebSocket {
   constructor({ url, onStateChange, onMessage, onError, onAuthFailure } = {}) {
@@ -28,12 +29,18 @@ export class VehicleWebSocket {
       });
       this.socket.addEventListener('message', (event) => this.handleMessage(event.data));
       this.socket.addEventListener('error', (event) => {
+        showAlert('No se pudo conectar con el WebSocket (WSS). Se reintentará automáticamente.', 'error', { mirror: true });
         this.onError?.(event);
         this.setState('disconnected', 'Error de conexión');
       });
       this.socket.addEventListener('close', (event) => {
         this.socket = null;
-        if ([4401, 4403].includes(event.code)) this.onAuthFailure?.(event.code);
+        if ([4401, 4403].includes(event.code)) {
+          showAlert(formatWsClose(event.code), 'error');
+          this.onAuthFailure?.(event.code);
+        } else if (!this.closedByUser && event.code !== 1000 && event.code !== 1001) {
+          showAlert(`Conexión WSS caída (código ${event.code}). Reintentando…`, 'error', { mirror: true });
+        }
         if (this.closedByUser) {
           this.setState('disconnected', 'Desconectado');
           return;

@@ -1,6 +1,7 @@
 import { APP_CONFIG, ENDPOINTS } from './config.js';
 import { validateHealth, validateRdsHealth } from './rest-client.js';
 import { safeText } from './utils.js';
+import { formatError, showAlert } from './error-alerts.js';
 
 export async function checkApiHealth(api, ui, { notify = true } = {}) {
   ui.setStatus('api', { state: 'checking', label: 'API…', detail: 'Consultando GET /' });
@@ -28,7 +29,9 @@ export async function checkRdsHealth(api, ui) {
     ui.updateRdsStatus('online', 'RDS MySQL conectado según el diagnóstico del backend.');
     return true;
   } catch (error) {
-    ui.updateRdsStatus('offline', error?.message || 'No se pudo verificar RDS.');
+    const message = formatError(error, 'RDS MySQL');
+    ui.updateRdsStatus('offline', message);
+    showAlert(message, 'error', { mirror: true });
     return false;
   }
 }

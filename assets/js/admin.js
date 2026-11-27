@@ -1,5 +1,6 @@
 import { ApiError } from './rest-client.js';
 import { ENDPOINTS } from './config.js';
+import { formatError, showAlert } from './error-alerts.js';
 
 const INVENTORY_STATES = ['INVENTARIO', 'EXHIBICION', 'VENDIDA', 'MANTENIMIENTO', 'BAJA'];
 
@@ -56,6 +57,7 @@ export class AdminController {
     this.assignments = [];
     this.dashboard = null;
     this.selectedUnitId = null;
+    this.unitCommands = [];
     this.editingModelId = null;
     this.editingUnitId = null;
     this.auditOffset = 0;
@@ -91,6 +93,10 @@ export class AdminController {
     document.getElementById('admin-command-form')?.addEventListener('submit', (event) => {
       event.preventDefault();
       void this.createCommand(event.currentTarget);
+    });
+    document.getElementById('admin-movimiento-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void this.createMovimiento(event.currentTarget);
     });
     document.getElementById('admin-operations-unit')?.addEventListener('change', (event) => {
       this.selectedUnitId = Number(event.target.value) || null;
@@ -172,6 +178,10 @@ export class AdminController {
     if (!unitId) {
       emptyRow(commandsBody, 5, 'Selecciona una unidad para consultar comandos y demos.');
       emptyRow(demosBody, 4, 'Selecciona una unidad para consultar demos.');
+      this.unitCommands = [];
+      this.populateMovimientoCommandSelect();
+      this.renderMovimientos([]);
+      this.setMovimientoMessage('', 'info');
       return;
     }
     try {
@@ -179,8 +189,11 @@ export class AdminController {
         this.api.request(ENDPOINTS.commands(unitId)),
         this.api.getDemos(unitId),
       ]);
-      this.renderCommands(arrayPayload(commands));
+      this.unitCommands = arrayPayload(commands);
+      this.renderCommands(this.unitCommands);
       this.renderDemos(arrayPayload(demos));
+      this.populateMovimientoCommandSelect();
+      await this.loadMovimientos();
     } catch (error) {
       this.setMessage(this.errorMessage(error), 'error');
       emptyRow(commandsBody, 5, 'No fue posible consultar los comandos de esta unidad.');
@@ -419,6 +432,103 @@ export class AdminController {
     });
   }
 
+  setMovimientoMessage(message, state = 'info') {
+    const target = document.getElementById('admin-movimiento-message');
+    if (!target) return;
+    target.textContent = message;
+    target.dataset.state = state;
+    if (state === 'error') showAlert(message, 'error', { mirror: true });
+  }
+
+  populateMovimientoCommandSelect(selected = '') {
+    const select = document.getElementById('admin-movimiento-comando');
+    if (!select) return;
+    select.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Selecciona comando';
+    select.append(placeholder);
+    this.unitCommands
+      .filter((command) => command.activo !== false && Number(command.codigo) !== 7)
+      .forEach((command) => {
+        const option = document.createElement('option');
+        option.value = String(command.id_comando);
+        option.textContent = `${command.codigo} · ${command.nombre}`;
+        option.selected = String(command.id_comando) === String(selected);
+        select.append(option);
+      });
+  }
+
+  async loadMovimientos() {
+    if (!this.selectedUnitId) {
+      this.renderMovimientos([]);
+      return;
+    }
+    try {
+      this.renderMovimientos(arrayPayload(await this.api.getMovimientos(this.selectedUnitId)));
+    } catch (error) {
+      const body = document.getElementById('admin-movimientos-body');
+      if (body) emptyRow(body, 7, 'No fue posible consultar los movimientos de esta unidad.');
+      this.setMovimientoMessage(this.errorMessage(error), 'error');
+    }
+  }
+
+  renderMovimientos(movimientos) {
+    const body = document.getElementById('admin-movimientos-body');
+    if (!body) return;
+    body.replaceChildren();
+    if (!movimientos.length) return emptyRow(body, 7, 'No hay movimientos configurados para esta unidad.');
+    movimientos.forEach((movimiento) => {
+      const row = document.createElement('tr');
+      cell(row, movimiento.id_movimiento);
+      cell(row, movimiento.nombre);
+      cell(row, movimiento.comando ?? movimiento.id_comando);
+      cell(row, movimiento.codigo);
+      cell(row, movimiento.duracion_ms);
+      cell(row, movimiento.activo === false ? 'Inactivo' : 'Activo');
+      const action = cell(row, '');
+      if (movimiento.activo !== false) {
+        const button = document.createElement('button');
+        button.className = 'btn btn-sm btn-outline-danger';
+        button.type = 'button';
+        button.textContent = 'Desactivar';
+        button.addEventListener('click', () => { void this.deactivateMovimiento(movimiento.id_movimiento); });
+        action.replaceChildren(button);
+      }
+      body.append(row);
+    });
+  }
+
+  async createMovimiento(form) {
+    if (!this.selectedUnitId) {
+      this.setMovimientoMessage('Selecciona una unidad antes de crear movimientos.', 'error');
+      return;
+    }
+    try {
+      await this.api.createMovimiento({
+        id_comando: numberValue(form, 'id_comando'),
+        nombre: valueOf(form, 'nombre'),
+        duracion_ms: numberValue(form, 'duracion_ms'),
+      });
+      form.reset();
+      this.populateMovimientoCommandSelect();
+      await this.loadMovimientos();
+      this.setMovimientoMessage('Movimiento creado correctamente.', 'success');
+    } catch (error) {
+      this.setMovimientoMessage(this.errorMessage(error), 'error');
+    }
+  }
+
+  async deactivateMovimiento(id) {
+    try {
+      await this.api.deleteMovimiento(id);
+      await this.loadMovimientos();
+      this.setMovimientoMessage('Movimiento desactivado correctamente.', 'success');
+    } catch (error) {
+      this.setMovimientoMessage(this.errorMessage(error), 'error');
+    }
+  }
+
   renderModelCommands(commands) {
     const body = document.getElementById('admin-capability-body');
     if (!body) return;
@@ -542,10 +652,11 @@ export class AdminController {
     if (!this.message) return;
     this.message.textContent = message;
     this.message.dataset.state = state;
+    if (state === 'error') showAlert(message, 'error', { mirror: true });
   }
 
   errorMessage(error) {
-    if (error instanceof ApiError) return error.status === 403 ? '403: requiere permisos ADMIN o soporte vigente para esta unidad.' : `${error.status || 'Error'}: ${error.message}`;
+    if (error instanceof ApiError) return formatError(error, 'Administración');
     return error?.message || 'No se pudo completar la operación administrativa.';
   }
 }

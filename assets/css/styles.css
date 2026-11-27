@@ -609,6 +609,48 @@ select:focus-visible,
   border-color: #f87171;
 }
 
+/* Alerta global: error visible y persistente hasta que el usuario la cierra */
+.global-alert {
+  position: fixed;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  width: min(94vw, 620px);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #f87171;
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.98);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+}
+
+.global-alert[hidden] { display: none !important; }
+
+.global-alert--error { border-color: #f87171; background: rgba(127, 29, 29, 0.98); }
+.global-alert--info { border-color: #38bdf8; background: rgba(12, 74, 110, 0.98); }
+.global-alert--success { border-color: var(--accent-green); background: rgba(6, 78, 59, 0.98); }
+
+.global-alert__icon { flex: 0 0 auto; font-size: 1rem; line-height: 1.2; }
+.global-alert__text { flex: 1 1 auto; overflow-wrap: anywhere; }
+.global-alert__close {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.15rem;
+}
+.global-alert__close:hover { opacity: 0.75; }
+
 .demo-step-toast {
   position: relative;
   overflow: hidden;

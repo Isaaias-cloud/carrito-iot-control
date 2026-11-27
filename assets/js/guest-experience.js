@@ -1,4 +1,5 @@
 import { ApiError } from './rest-client.js';
+import { formatError, showAlert } from './error-alerts.js';
 
 function items(value) { return Array.isArray(value) ? value : []; }
 
@@ -87,6 +88,9 @@ export class GuestExperience {
     }
   }
 
-  setMessage(message, state = 'info') { if (this.message) { this.message.textContent = message; this.message.dataset.state = state; } }
-  errorMessage(error) { return error instanceof ApiError ? `${error.status || 'Error'}: ${error.message}` : error?.message || 'No se pudo reservar la unidad.'; }
+  setMessage(message, state = 'info') {
+    if (this.message) { this.message.textContent = message; this.message.dataset.state = state; }
+    if (state === 'error') showAlert(message, 'error', { mirror: true });
+  }
+  errorMessage(error) { return error instanceof ApiError ? formatError(error, 'Modo invitado') : error?.message || 'No se pudo reservar la unidad.'; }
 }

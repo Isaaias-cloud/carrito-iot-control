@@ -1,4 +1,5 @@
 import { ApiError } from './rest-client.js';
+import { formatError, showAlert } from './error-alerts.js';
 
 export class AuthUI {
   constructor({ session, api, onAuthenticated, onLogout, onGuest } = {}) {
@@ -68,7 +69,7 @@ export class AuthUI {
       this.close();
       this.onAuthenticated?.(profile);
     } catch (error) {
-      this.setMessage(error instanceof ApiError ? error.message : 'No se pudo iniciar sesión.', 'error');
+      this.setMessage(error instanceof ApiError ? formatError(error, 'Inicio de sesión') : 'No se pudo iniciar sesión.', 'error');
     } finally {
       this.setBusy(false);
     }
@@ -117,5 +118,6 @@ export class AuthUI {
     if (!this.message) return;
     this.message.textContent = message;
     this.message.dataset.state = type;
+    if (type === 'error') showAlert(message, 'error', { mirror: true });
   }
 }

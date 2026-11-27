@@ -1,4 +1,5 @@
 import { formatCommandLabel, formatDate, safeText, createElement } from './utils.js';
+import { showAlert } from './error-alerts.js';
 
 const STATUS_CLASSES = new Set(['online', 'offline', 'checking', 'unknown']);
 const MAX_VISIBLE_TOASTS = 3;
@@ -17,6 +18,8 @@ export class ControlUI {
     this.stopButton = document.getElementById('stop-button');
     this.demoSelect = document.getElementById('demo-select');
     this.runDemoButton = document.getElementById('btn-run-demo');
+    this.movimientoSelect = document.getElementById('movimiento-select');
+    this.runMovimientoButton = document.getElementById('btn-run-movimiento');
     this.actionButtons = {
       sound: document.getElementById('btn-sound'),
       speed: document.getElementById('btn-speed'),
@@ -128,6 +131,34 @@ export class ControlUI {
   setDemoSelectionReady(isReady) {
     if (!this.runDemoButton || this.demoExecuting) return;
     this.runDemoButton.disabled = !this.demoAvailable || !isReady;
+  }
+
+  renderMovimientoOptions(movimientos) {
+    if (!this.movimientoSelect) return 0;
+    const options = [];
+    for (const item of Array.isArray(movimientos) ? movimientos : []) {
+      const id = Number(item.id_movimiento ?? item.id);
+      if (!Number.isInteger(id) || id <= 0) continue;
+      const option = document.createElement('option');
+      option.value = String(id);
+      option.textContent = `#${id} · ${safeText(item.nombre, `Movimiento ${id}`)} (${safeText(item.duracion_ms, '?')} ms)`;
+      options.push(option);
+    }
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.disabled = options.length > 0;
+    placeholder.selected = true;
+    placeholder.textContent = options.length > 0 ? 'Selecciona un movimiento' : 'No hay movimientos';
+    this.movimientoSelect.replaceChildren(placeholder, ...options);
+    this.movimientoSelect.value = '';
+    this.movimientoSelect.disabled = options.length === 0;
+    if (this.runMovimientoButton) this.runMovimientoButton.disabled = true;
+    return options.length;
+  }
+
+  setMovimientoSelectionReady(isReady) {
+    if (!this.runMovimientoButton) return;
+    this.runMovimientoButton.disabled = !isReady || !this.movimientoSelect?.value;
   }
 
   setDemoExecuting(isExecuting, message = '') {
@@ -283,6 +314,7 @@ export class ControlUI {
 
   toast(message, type = 'info') {
     if (!this.toastRegion) return;
+    if (type === 'error') showAlert(message, 'error', { mirror: true });
     const activeToasts = [...this.toastRegion.querySelectorAll('.app-toast')];
     while (activeToasts.length >= MAX_VISIBLE_TOASTS) {
       activeToasts.shift()?.remove();
