@@ -54,6 +54,21 @@ export class OwnerExperience {
   async loadVehicles() {
     try {
       this.vehicles = listValue(await this.api.getMyVehicles());
+      // Un ADMIN sin asignación también debe poder operar el inventario.
+      let roles = Array.isArray(this.profile?.roles) ? this.profile.roles : [];
+      if (!roles.length) {
+        const perfil = await this.api.getMe();
+        roles = Array.isArray(perfil?.roles) ? perfil.roles : [];
+      }
+      if (!this.vehicles.length && roles.includes('ADMIN')) {
+        this.vehicles = listValue(await this.api.getVehicles()).map((vehicle) => ({
+          id_vehiculo: vehicle.id_vehiculo,
+          vehiculo_nombre: vehicle.nombre,
+          identificador_unico: vehicle.identificador_unico || '',
+          modelo_nombre: vehicle.modelo,
+          acceso_tipo: 'ADMIN',
+        }));
+      }
       this.renderVehicleOptions();
       if (!this.vehicles.length) {
         this.setMessage('No tienes unidades disponibles. Solicita una asignación o un consentimiento de soporte vigente.', 'info');
@@ -77,7 +92,7 @@ export class OwnerExperience {
     this.vehicles.forEach((vehicle) => {
       const option = document.createElement('option');
       option.value = vehicle.id_vehiculo;
-      option.textContent = `${vehicle.vehiculo_nombre} · ${vehicle.identificador_unico} · ${vehicle.acceso_tipo || 'PROPIETARIO'}`;
+      option.textContent = `${vehicle.vehiculo_nombre} · ${vehicle.identificador_unico || 'unidad'} · ${vehicle.acceso_tipo || 'PROPIETARIO'}`;
       this.vehicleSelect.append(option);
     });
   }

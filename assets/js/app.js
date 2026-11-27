@@ -25,11 +25,17 @@ const ui = new ControlUI();
 const ACTION_PULSE_MS = 500;
 let commandIndex = { byName: new Map(), byId: new Map(), all: [] };
 let vehicleState = { conectado: true };
+// Presencia del ESP8266: distinta del WebSocket del navegador y del último
+// valor `conectado` enviado con un comando.
+let deviceConnected = true;
 let activeRequest = null;
 let pendingCommand = null;
 let lastCompletedCommand = { id: null, at: 0 };
 let demoExecuting = false;
 let actionPulseTimer = null;
+// Autorizacion manual sostenida: se renueva mientras el usuario mantiene el control.
+let renovacionManualTimer = null;
+let comandoManualActivo = null;
 
 const joystickState = {
   left: { pointerId: null, direction: 'neutral' },
@@ -37,7 +43,16 @@ const joystickState = {
 };
 
 function getConnectedFlag() {
-  return typeof vehicleState.conectado === 'boolean' ? vehicleState.conectado : true;
+  return deviceConnected;
+}
+
+function applyDeviceConnection(conectado) {
+  deviceConnected = Boolean(conectado);
+  ui.setDeviceConnected(deviceConnected);
+  if (!deviceConnected) {
+    cancelActionPulse();
+    ui.clearDemoMovement();
+  }
 }
 
 function setBusy(isBusy) {
@@ -48,6 +63,26 @@ function cancelActionPulse() {
   if (actionPulseTimer === null) return;
   window.clearTimeout(actionPulseTimer);
   actionPulseTimer = null;
+}
+
+function detenerRenovacionManual() {
+  if (renovacionManualTimer !== null) {
+    window.clearInterval(renovacionManualTimer);
+    renovacionManualTimer = null;
+  }
+  comandoManualActivo = null;
+}
+
+function iniciarRenovacionManual(command) {
+  detenerRenovacionManual();
+  comandoManualActivo = command;
+  renovacionManualTimer = window.setInterval(() => {
+    if (!comandoManualActivo || !deviceConnected || !selectedVehicleId) {
+      detenerRenovacionManual();
+      return;
+    }
+    void handleCommandExecution(comandoManualActivo);
+  }, 500);
 }
 
 function joystickLabel(direction) {
@@ -93,6 +128,10 @@ async function handleCommandExecution(command, { button = null, isStop = false }
       ui.toast('Selecciona una unidad antes de enviar comandos.', 'error');
       return false;
     }
+    if (!deviceConnected && !isStop) {
+      ui.toast('El dispositivo está desconectado. Sólo DETENER está disponible.', 'error');
+      return false;
+    }
     const response = await api.request(ENDPOINTS.sendCommand(selectedVehicleId), {
       method: 'POST',
       body: commandPayload(command, getConnectedFlag()),
@@ -102,6 +141,9 @@ async function handleCommandExecution(command, { button = null, isStop = false }
       throw new Error('La respuesta del comando no coincide con la solicitud.');
     }
     vehicleState = { ...vehicleState, conectado: response.conectado };
+    if (response.entregado === false) {
+      ui.toast('Comando registrado, pero no entregado: no hay dispositivo conectado.', 'error');
+    }
     if (!isStop) lastCompletedCommand = { id: command.id_comando, at: Date.now() };
     if (button) ui.markButton(button, 'accepted');
     if (!isStop) ui.toast(`${formatCommandLabel(command.nombre, 'Comando')} aceptado por la API.`, 'success');
@@ -122,6 +164,7 @@ async function handleCommandExecution(command, { button = null, isStop = false }
 
 async function stopVehicle() {
   cancelActionPulse();
+  detenerRenovacionManual();
   ui.clearDemoMovement();
   for (const joystick of ['left', 'right']) {
     joystickState[joystick].direction = 'neutral';
@@ -132,6 +175,7 @@ async function stopVehicle() {
 
 async function handleCenterActionClick(action) {
   cancelActionPulse();
+  detenerRenovacionManual();
   const previousStates = ui.getActionStatesSnapshot();
   ui.toggleActionActive(action);
 
@@ -202,8 +246,9 @@ async function runSelectedMovimiento() {
   try {
     const response = await api.executeMovimiento(movimientoId);
     ui.toast(
-      `${safeText(response?.codigo, '?')} ejecutado · ${safeText(response?.duracion_ms, '?')} ms · paro automático programado`,
-      'success',
+      `${safeText(response?.codigo, '?')} ejecutado · ${safeText(response?.duracion_ms, '?')} ms · paro automático programado`
+      + (response?.entregado === false ? ' · no entregado (sin dispositivo)' : ''),
+      response?.entregado === false ? 'error' : 'success',
     );
   } catch (error) {
     ui.toast(error?.message || 'No se pudo ejecutar el movimiento.', 'error');
@@ -222,7 +267,9 @@ async function applyJoystickDirection(joystick, direction) {
     ui.toast(`No existe un comando de ${joystick === 'left' ? 'movimiento' : 'pala'} para ${joystickLabel(direction)} en el catálogo remoto.`, 'error');
     return;
   }
-  await handleCommandExecution(command);
+  const aceptado = await handleCommandExecution(command);
+  if (aceptado && direction !== 'neutral') iniciarRenovacionManual(command);
+  else detenerRenovacionManual();
 }
 
 function directionFromPointer(element, event) {
@@ -334,6 +381,7 @@ async function checkApiAndLoadData() {
 }
 
 function handleWsState({ state, detail }) {
+  if (state === 'disconnected') detenerRenovacionManual();
   const states = {
     online: { state: 'online', label: 'WSS OK' },
     connecting: { state: 'checking', label: detail === 'Reconectando…' ? 'WSS ↻' : 'WSS…' },
@@ -344,7 +392,26 @@ function handleWsState({ state, detail }) {
 
 function handleWsMessage(message) {
   if (isRecord(message) && message.id_vehiculo !== undefined && Number(message.id_vehiculo) !== Number(selectedVehicleId)) return;
-  if (isRecord(message) && typeof message.conectado === 'boolean') vehicleState = { ...vehicleState, conectado: message.conectado };
+  // Sólo los eventos explícitos de presencia de hardware cambian el estado
+  // físico. El eco de un comando (nuevo_movimiento) NO es presencia del ESP.
+  if (isRecord(message)) {
+    if (message.event === 'estado_ack') {
+      ui.toast(
+        message.valido
+          ? `Firmware confirmó código ${message.registro?.codigo ?? '?'} (secuencia ${message.registro?.secuencia ?? '?'}).`
+          : `ACK no válido: ${message.motivo || 'desconocido'}.`,
+        message.valido ? 'info' : 'error',
+      );
+      return;
+    }
+    if (message.event === 'device_connected' || message.event === 'device_disconnected') {
+      applyDeviceConnection(message.conectado === true);
+    } else if (typeof message.device_conectado === 'boolean') {
+      applyDeviceConnection(message.device_conectado);
+    } else if (message.event === 'estado_actual' && typeof message.conectado === 'boolean') {
+      vehicleState = { ...vehicleState, conectado: message.conectado };
+    }
+  }
   if (
     isRecord(message)
     && message.event === 'nuevo_movimiento'
@@ -437,6 +504,7 @@ function startAuthenticated(profile) {
   admin.setVisible(roles.includes('ADMIN'));
   admin.init();
   ui.setIdentity({ id: selectedVehicleId || '—', studentName: APP_CONFIG.studentName });
+  applyDeviceConnection(false);
   ui.setActionButtonsDisabled(true);
   ui.setStatus('ws', { state: 'checking', label: 'WSS…', detail: 'Abriendo sesión WSS real…' });
   ui.setStatus('api', { state: 'checking', label: 'API…', detail: 'Comprobando API…' });
@@ -456,6 +524,7 @@ function startAuthenticated(profile) {
 }
 
 authSession.addEventListener('expired', () => {
+  detenerRenovacionManual();
   vehicleSession.disconnect();
   ui.setActionButtonsDisabled(true);
   window.location.reload();

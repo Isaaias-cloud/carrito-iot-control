@@ -52,6 +52,7 @@
         </label>
 
         <div class="status-strip" aria-label="Estado del sistema">
+          <span class="status-pill status-pill--checking" id="status-device-pill" title="Dispositivo ESP8266">ESP</span>
           <span class="status-pill status-pill--checking" id="status-ws-pill" title="WebSocket">WSS</span>
           <span class="status-pill status-pill--checking" id="status-api-pill" title="API REST">API</span>
           <span class="status-pill status-pill--unknown" id="status-rds-pill" title="Base de datos RDS">RDS</span>
@@ -343,7 +344,27 @@
             </form>
             <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Movimientos puntuales</caption><thead><tr><th>ID</th><th>Nombre</th><th>Comando</th><th>Código</th><th>Duración ms</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="admin-movimientos-body"></tbody></table></div>
           </div>
-          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Demos empresariales</caption><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Estado</th></tr></thead><tbody id="admin-demos-body"></tbody></table></div>
+          <div class="admin-demos" data-role="ADMIN">
+            <div class="admin-section__heading"><h4>Demos empresariales</h4><span>Solo ADMIN · hasta 100 pasos / 300000 ms</span></div>
+            <p class="admin-status" id="admin-demo-message" role="status" aria-live="polite"></p>
+            <form class="admin-form-grid" id="admin-demo-form">
+              <label>Nombre<input id="admin-demo-nombre" name="nombre" maxlength="80" required></label>
+              <label>Descripción<input id="admin-demo-descripcion" name="descripcion" maxlength="255" required></label>
+              <button class="btn btn-primary" id="admin-demo-submit" type="submit">Crear demo</button>
+            </form>
+            <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Demos empresariales</caption><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="admin-demos-body"></tbody></table></div>
+            <div id="admin-demo-steps-panel" hidden>
+              <h5 id="admin-demo-steps-title">Pasos de la demo</h5>
+              <form class="admin-form-grid" id="admin-demo-step-form">
+                <label>Comando<select id="admin-demo-step-comando" name="id_comando" aria-label="Comando del paso" required><option value="">Selecciona comando</option></select></label>
+                <label>Orden<input id="admin-demo-step-orden" name="orden" type="number" min="1" max="100" value="1" required></label>
+                <label>Duración ms<input id="admin-demo-step-duracion" name="duracion_ms" type="number" min="0" max="300000" value="200" required></label>
+                <label>Pausa ms<input id="admin-demo-step-pausa" name="pausa_ms" type="number" min="0" max="300000" value="0" required></label>
+                <button class="btn btn-primary" id="admin-demo-step-submit" type="submit">Agregar paso</button>
+              </form>
+              <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Pasos de la demo</caption><thead><tr><th>ID</th><th>Orden</th><th>Comando</th><th>Código</th><th>Duración</th><th>Pausa</th><th>Acción</th></tr></thead><tbody id="admin-demo-steps-body"></tbody></table></div>
+            </div>
+          </div>
         </section>
 
         <section class="admin-section" aria-labelledby="admin-audit-heading">

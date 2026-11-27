@@ -91,12 +91,44 @@ export class RestClient {
     return this.request(ENDPOINTS.healthDb());
   }
 
+  async getVehicles() {
+    return this.request(ENDPOINTS.vehicles());
+  }
+
   async getHistory(vehicleId) {
     return this.request(ENDPOINTS.history(vehicleId));
   }
 
   async getDemos(vehicleId) {
-    return this.request(`/demos/vehiculo/${encodeURIComponent(Number(vehicleId))}`);
+    return this.request(ENDPOINTS.companyDemos(Number(vehicleId)));
+  }
+
+  async createCompanyDemo(body) {
+    return this.request(ENDPOINTS.companyDemoCreate(), { method: 'POST', body });
+  }
+
+  async updateCompanyDemo(id, body) {
+    return this.request(ENDPOINTS.companyDemo(id), { method: 'PUT', body });
+  }
+
+  async deleteCompanyDemo(id) {
+    return this.request(ENDPOINTS.companyDemo(id), { method: 'DELETE' });
+  }
+
+  async getCompanyDemoMovements(id) {
+    return this.request(ENDPOINTS.companyDemoMovements(id));
+  }
+
+  async addCompanyDemoMovement(body) {
+    return this.request(ENDPOINTS.companyDemoMovementAdd(), { method: 'POST', body });
+  }
+
+  async updateCompanyDemoMovement(id, body) {
+    return this.request(ENDPOINTS.companyDemoMovement(id), { method: 'PUT', body });
+  }
+
+  async deleteCompanyDemoMovement(id) {
+    return this.request(ENDPOINTS.companyDemoMovementDelete(id), { method: 'DELETE' });
   }
 
   async getMovimientos(vehicleId) {

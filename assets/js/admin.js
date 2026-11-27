@@ -58,6 +58,8 @@ export class AdminController {
     this.dashboard = null;
     this.selectedUnitId = null;
     this.unitCommands = [];
+    this.selectedDemoId = null;
+    this.demoSteps = [];
     this.editingModelId = null;
     this.editingUnitId = null;
     this.auditOffset = 0;
@@ -97,6 +99,14 @@ export class AdminController {
     document.getElementById('admin-movimiento-form')?.addEventListener('submit', (event) => {
       event.preventDefault();
       void this.createMovimiento(event.currentTarget);
+    });
+    document.getElementById('admin-demo-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void this.createDemo(event.currentTarget);
+    });
+    document.getElementById('admin-demo-step-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void this.addDemoStep(event.currentTarget);
     });
     document.getElementById('admin-operations-unit')?.addEventListener('change', (event) => {
       this.selectedUnitId = Number(event.target.value) || null;
@@ -422,14 +432,171 @@ export class AdminController {
     });
   }
 
+  setDemoMessage(message, state = 'info') {
+    const target = document.getElementById('admin-demo-message');
+    if (!target) return;
+    target.textContent = message;
+    target.dataset.state = state;
+    if (state === 'error') showAlert(message, 'error', { mirror: true });
+  }
+
+  populateDemoCommandSelect(selected = '') {
+    const select = document.getElementById('admin-demo-step-comando');
+    if (!select) return;
+    select.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Selecciona comando';
+    select.append(placeholder);
+    this.unitCommands
+      .filter((command) => command.activo !== false && Number(command.codigo) !== 7)
+      .forEach((command) => {
+        const option = document.createElement('option');
+        option.value = String(command.id_comando);
+        option.textContent = `${command.codigo} · ${command.nombre}`;
+        option.selected = String(command.id_comando) === String(selected);
+        select.append(option);
+      });
+  }
+
   renderDemos(demos) {
     const body = document.getElementById('admin-demos-body');
     if (!body) return;
     body.replaceChildren();
-    if (!demos.length) return emptyRow(body, 4, 'No hay demos empresariales para esta unidad.');
+    if (!demos.length) return emptyRow(body, 5, 'No hay demos empresariales para esta unidad.');
     demos.forEach((demo) => {
-      const row = document.createElement('tr'); cell(row, demo.id_demo); cell(row, demo.nombre); cell(row, demo.descripcion); cell(row, demo.activo ? 'Activa' : 'Inactiva'); body.append(row);
+      const row = document.createElement('tr');
+      cell(row, demo.id_demo); cell(row, demo.nombre); cell(row, demo.descripcion); cell(row, demo.activo ? 'Activa' : 'Inactiva');
+      const acciones = document.createElement('td');
+      const crearBoton = (texto, accion, className = 'btn-outline-secondary') => {
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = `btn btn-sm ${className}`;
+        boton.textContent = texto;
+        boton.addEventListener('click', () => { void accion(); });
+        return boton;
+      };
+      acciones.append(
+        crearBoton('Pasos', () => this.showDemoSteps(demo)),
+        crearBoton('Ejecutar', () => this.executeDemo(demo), 'btn-outline-primary'),
+        crearBoton('Eliminar', () => this.deleteDemo(demo), 'btn-outline-danger'),
+      );
+      row.append(acciones);
+      body.append(row);
     });
+  }
+
+  async createDemo(form) {
+    if (!this.selectedUnitId) {
+      this.setDemoMessage('Selecciona una unidad antes de crear demos.', 'error');
+      return;
+    }
+    const body = {
+      id_vehiculo: Number(this.selectedUnitId),
+      nombre: valueOf(form, 'nombre'),
+      descripcion: valueOf(form, 'descripcion'),
+    };
+    try {
+      const respuesta = await this.api.createCompanyDemo(body);
+      this.setDemoMessage(`Demo #${respuesta?.id_demo} creada.`, 'success');
+      form.reset();
+      await this.loadUnitOperations();
+    } catch (error) {
+      this.setDemoMessage(formatError(error), 'error');
+    }
+  }
+
+  async showDemoSteps(demo) {
+    this.selectedDemoId = Number(demo.id_demo);
+    document.getElementById('admin-demo-steps-panel')?.removeAttribute('hidden');
+    const titulo = document.getElementById('admin-demo-steps-title');
+    if (titulo) titulo.textContent = `Pasos de la demo #${demo.id_demo} · ${demo.nombre}`;
+    this.populateDemoCommandSelect();
+    await this.loadDemoSteps();
+  }
+
+  async loadDemoSteps() {
+    const body = document.getElementById('admin-demo-steps-body');
+    if (!body) return;
+    if (!this.selectedDemoId) return emptyRow(body, 7, 'Selecciona una demo para ver sus pasos.');
+    try {
+      this.demoSteps = arrayPayload(await this.api.getCompanyDemoMovements(this.selectedDemoId));
+    } catch (error) {
+      this.demoSteps = [];
+      this.setDemoMessage(formatError(error), 'error');
+    }
+    body.replaceChildren();
+    if (!this.demoSteps.length) return emptyRow(body, 7, 'Esta demo no tiene pasos todavía.');
+    this.demoSteps.forEach((paso) => {
+      const row = document.createElement('tr');
+      cell(row, paso.id_demo_movimiento); cell(row, paso.orden); cell(row, paso.comando); cell(row, paso.codigo);
+      cell(row, paso.duracion_ms); cell(row, paso.pausa_ms);
+      const acciones = document.createElement('td');
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'btn btn-sm btn-outline-danger';
+      boton.textContent = 'Eliminar';
+      boton.addEventListener('click', () => { void this.deleteDemoStep(paso); });
+      acciones.append(boton);
+      row.append(acciones);
+      body.append(row);
+    });
+  }
+
+  async addDemoStep(form) {
+    if (!this.selectedDemoId) {
+      this.setDemoMessage('Selecciona una demo antes de agregar pasos.', 'error');
+      return;
+    }
+    const body = {
+      id_demo: this.selectedDemoId,
+      id_comando: numberValue(form, 'id_comando'),
+      orden: numberValue(form, 'orden'),
+      duracion_ms: numberValue(form, 'duracion_ms'),
+      pausa_ms: numberValue(form, 'pausa_ms'),
+    };
+    try {
+      await this.api.addCompanyDemoMovement(body);
+      this.setDemoMessage('Paso agregado correctamente.', 'success');
+      await this.loadDemoSteps();
+    } catch (error) {
+      this.setDemoMessage(formatError(error), 'error');
+    }
+  }
+
+  async deleteDemoStep(paso) {
+    try {
+      await this.api.deleteCompanyDemoMovement(paso.id_demo_movimiento);
+      await this.loadDemoSteps();
+    } catch (error) {
+      this.setDemoMessage(formatError(error), 'error');
+    }
+  }
+
+  async executeDemo(demo) {
+    try {
+      const respuesta = await this.api.executeDemo({
+        id_demo: Number(demo.id_demo),
+        id_vehiculo: Number(this.selectedUnitId),
+      });
+      this.setDemoMessage(`Demo #${demo.id_demo} ejecutada: ${respuesta?.movimientos_ejecutados ?? '?'} pasos.`, 'success');
+    } catch (error) {
+      this.setDemoMessage(formatError(error), 'error');
+    }
+  }
+
+  async deleteDemo(demo) {
+    try {
+      await this.api.deleteCompanyDemo(Number(demo.id_demo));
+      if (this.selectedDemoId === Number(demo.id_demo)) {
+        this.selectedDemoId = null;
+        document.getElementById('admin-demo-steps-panel')?.setAttribute('hidden', '');
+      }
+      await this.loadUnitOperations();
+      this.setDemoMessage(`Demo #${demo.id_demo} eliminada.`, 'success');
+    } catch (error) {
+      this.setDemoMessage(formatError(error), 'error');
+    }
   }
 
   setMovimientoMessage(message, state = 'info') {

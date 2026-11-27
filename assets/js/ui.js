@@ -32,11 +32,13 @@ export class ControlUI {
       ws: document.getElementById('status-ws-pill'),
       api: document.getElementById('status-api-pill'),
       rds: document.getElementById('status-rds-pill'),
+      device: document.getElementById('status-device-pill'),
     };
     this.buttonTimers = new WeakMap();
     this.demoMovementToast = null;
     this.demoMovementTimer = null;
     this.actionsDisabled = false;
+    this.deviceConnected = true;
     this.demoAvailable = false;
     this.demoExecuting = false;
 
@@ -176,9 +178,31 @@ export class ControlUI {
 
   setActionButtonsDisabled(disabled) {
     this.actionsDisabled = Boolean(disabled);
-    Object.values(this.actionButtons).forEach((button) => {
-      if (button) button.disabled = this.actionsDisabled;
+    this._applyEnabledState();
+  }
+
+  /** Estado físico del ESP8266, distinto del WebSocket del navegador. */
+  setDeviceConnected(connected) {
+    this.deviceConnected = Boolean(connected);
+    this.setStatus('device', {
+      state: this.deviceConnected ? 'online' : 'offline',
+      label: this.deviceConnected ? 'ESP OK' : 'ESP OFF',
+      detail: this.deviceConnected ? 'Dispositivo conectado' : 'Dispositivo desconectado',
     });
+    if (!this.deviceConnected) this.clearDemoMovement();
+    this._applyEnabledState();
+  }
+
+  _applyEnabledState() {
+    const bloqueado = this.actionsDisabled || !this.deviceConnected;
+    Object.values(this.actionButtons).forEach((button) => {
+      if (button) button.disabled = bloqueado;
+    });
+    [this.runDemoButton, this.runMovimientoButton, this.demoSelect, this.movimientoSelect].forEach((control) => {
+      if (control) control.disabled = bloqueado;
+    });
+    // DETENER sigue disponible aunque el hardware esté desconectado.
+    if (this.stopButton) this.stopButton.disabled = false;
   }
 
   setActionActive(action, isActive) {
