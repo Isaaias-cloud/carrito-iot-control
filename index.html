@@ -59,7 +59,7 @@
         </div>
       </header>
 
-      <section class="guest-banner" id="guest-banner" data-auth-only hidden role="status" aria-live="polite">
+      <section class="guest-banner" id="guest-banner" data-auth-only data-guest-only hidden role="status" aria-live="polite">
         <span>Sesión de exhibición activa · unidad reservada · <strong id="guest-timer">05:00</strong></span>
         <button class="btn btn-sm btn-danger" id="guest-finish" type="button">Finalizar sesión</button>
       </section>
@@ -248,6 +248,7 @@
                   <th scope="col">Movimiento</th>
                   <th scope="col">Fecha</th>
                   <th scope="col">Hora</th>
+                  <th scope="col">Entrega</th>
                 </tr>
               </thead>
               <tbody id="history-body"></tbody>
@@ -332,7 +333,7 @@
             <label class="admin-form-wide">Descripción<textarea name="descripcion" required maxlength="500" rows="2"></textarea></label>
             <button class="btn btn-primary" type="submit">Agregar comando</button>
           </form>
-          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Comandos permitidos</caption><thead><tr><th>ID</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="admin-commands-body"></tbody></table></div>
+          <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Comandos permitidos</caption><thead><tr><th>ID</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Activo</th><th>Permitido (modelo)</th><th>Acción</th></tr></thead><tbody id="admin-commands-body"></tbody></table></div>
           <div class="admin-movimientos" data-role="ADMIN">
             <div class="admin-section__heading"><h4 id="admin-movimientos-heading">Movimientos puntuales</h4><span>Solo ADMIN · códigos 0-13 (7 reservado para el firmware)</span></div>
             <p class="admin-status" id="admin-movimiento-message" role="status" aria-live="polite"></p>

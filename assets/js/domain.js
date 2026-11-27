@@ -73,8 +73,11 @@ export function getStopCommand(index) {
   return findCommandByAliases(index, [COMMAND_NAMES.stop]);
 }
 
-export function commandPayload(command, connected, origin = 'MANUAL') {
-  return { id_comando: Number(command.id_comando), conectado: Boolean(connected), origen: origin };
+export function commandPayload(command, connected, origin = 'MANUAL', idEjecucion = null) {
+  const payload = { id_comando: Number(command.id_comando), conectado: Boolean(connected), origen: origin };
+  // Solo se envía cuando el servidor emitió un token para una ejecución real.
+  if (typeof idEjecucion === 'string' && idEjecucion) payload.id_ejecucion = idEjecucion;
+  return payload;
 }
 
 export function validateDemoPayload(demoId, vehicleId) {

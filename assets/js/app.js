@@ -23,6 +23,7 @@ const vehicleSession = new VehicleSession({
 });
 const ui = new ControlUI();
 const ACTION_PULSE_MS = 500;
+const RENOVACION_MANUAL_MS = 500;
 let commandIndex = { byName: new Map(), byId: new Map(), all: [] };
 let vehicleState = { conectado: true };
 // Presencia del ESP8266: distinta del WebSocket del navegador y del último
@@ -36,6 +37,20 @@ let actionPulseTimer = null;
 // Autorizacion manual sostenida: se renueva mientras el usuario mantiene el control.
 let renovacionManualTimer = null;
 let comandoManualActivo = null;
+// Token opaco devuelto por la API para la ejecución manual actual. El frontend
+// no lo inventa: solo lo devuelve en las renovaciones de esa misma ejecución.
+let idEjecucionManual = null;
+let ultimoIdEjecucion = null;
+let renovacionManualActiva = false;
+let rechazoRenovacion = false;
+// Seguimiento explícito de qué interacción inició un movimiento y si hay una
+// ejecución del backend pendiente de cancelar.
+const movimientosJoystick = new Set();
+let ejecucionBackendActiva = false;
+
+function hayTrabajoQueCancelar() {
+  return movimientosJoystick.size > 0 || ejecucionBackendActiva || demoExecuting;
+}
 
 const joystickState = {
   left: { pointerId: null, direction: 'neutral' },
@@ -51,7 +66,17 @@ function applyDeviceConnection(conectado) {
   ui.setDeviceConnected(deviceConnected);
   if (!deviceConnected) {
     cancelActionPulse();
+    detenerRenovacionManual();
+    movimientosJoystick.clear();
     ui.clearDemoMovement();
+    for (const joystick of ['left', 'right']) {
+      joystickState[joystick].direction = 'neutral';
+      joystickState[joystick].liberado = true;
+      resetJoystickVisual(joystick);
+    }
+    // DETENER sigue disponible para cancelar ejecuciones del backend aunque
+    // no haya dispositivo; nunca se reanuda nada al reconectar.
+    if (ejecucionBackendActiva || demoExecuting) void stopVehicle({ forzar: true });
   }
 }
 
@@ -67,22 +92,41 @@ function cancelActionPulse() {
 
 function detenerRenovacionManual() {
   if (renovacionManualTimer !== null) {
-    window.clearInterval(renovacionManualTimer);
+    window.clearTimeout(renovacionManualTimer);
     renovacionManualTimer = null;
   }
   comandoManualActivo = null;
+  idEjecucionManual = null;
+  renovacionManualActiva = false;
 }
 
 function iniciarRenovacionManual(command) {
   detenerRenovacionManual();
+  if (!ultimoIdEjecucion) return;
   comandoManualActivo = command;
-  renovacionManualTimer = window.setInterval(() => {
-    if (!comandoManualActivo || !deviceConnected || !selectedVehicleId) {
+  idEjecucionManual = ultimoIdEjecucion;
+  renovacionManualActiva = true;
+  rechazoRenovacion = false;
+  // Bucle secuencial: se agenda la siguiente renovación solo después de que
+  // termine la anterior. Así no se solapan solicitudes ni se interpreta un
+  // "omitido por solicitud en vuelo" como un rechazo del servidor.
+  const renovar = async () => {
+    if (!renovacionManualActiva || !comandoManualActivo || !idEjecucionManual
+        || !deviceConnected || !selectedVehicleId) {
       detenerRenovacionManual();
       return;
     }
-    void handleCommandExecution(comandoManualActivo);
-  }, 500);
+    await handleCommandExecution(comandoManualActivo, {
+      origen: 'RENOVACION_MANUAL',
+      id_ejecucion: idEjecucionManual,
+    });
+    if (rechazoRenovacion || !renovacionManualActiva) {
+      detenerRenovacionManual();
+      return;
+    }
+    renovacionManualTimer = window.setTimeout(renovar, RENOVACION_MANUAL_MS);
+  };
+  renovacionManualTimer = window.setTimeout(renovar, RENOVACION_MANUAL_MS);
 }
 
 function joystickLabel(direction) {
@@ -100,19 +144,26 @@ function resetJoystickVisual(joystick) {
   setJoystickReadout(joystick, 'neutral');
 }
 
-async function handleCommandExecution(command, { button = null, isStop = false } = {}) {
+async function handleCommandExecution(command, { button = null, isStop = false, origen = 'MANUAL', id_ejecucion = null } = {}) {
   if (!command) {
     ui.toast(isStop ? 'DETENER no está disponible en el catálogo remoto.' : 'Esta función no está disponible en el catálogo remoto.', 'error');
     return false;
   }
   if (activeRequest && !isStop) {
-    if (pendingCommand?.command.id_comando === command.id_comando) return false;
-    pendingCommand = { command, button };
-    return false;
+    if (pendingCommand?.command.id_comando === command.id_comando) return pendingCommand.promise;
+    // El reenvío debe conservar el origen y el token de ejecución; si se
+    // perdieran, una renovación o un cambio de dirección se convertiría en
+    // una solicitud MANUAL nueva y dejaría una ejecución sin renovar.
+    let resolver;
+    const promise = new Promise((resolve) => { resolver = resolve; });
+    pendingCommand?.resolve?.(false);
+    pendingCommand = { command, button, origen, id_ejecucion, isStop, resolve: resolver, promise };
+    return promise;
   }
   if (isStop && activeRequest?.isStop) return false;
   if (!isStop && lastCompletedCommand.id === command.id_comando && Date.now() - lastCompletedCommand.at < 350) return false;
   if (isStop) {
+    pendingCommand?.resolve?.(false);
     pendingCommand = null;
     activeRequest?.controller.abort();
   }
@@ -134,12 +185,13 @@ async function handleCommandExecution(command, { button = null, isStop = false }
     }
     const response = await api.request(ENDPOINTS.sendCommand(selectedVehicleId), {
       method: 'POST',
-      body: commandPayload(command, getConnectedFlag()),
+      body: commandPayload(command, getConnectedFlag(), origen, id_ejecucion),
       signal: controller.signal,
     });
     if (!isRecord(response) || Number(response.id_comando) !== Number(command.id_comando)) {
       throw new Error('La respuesta del comando no coincide con la solicitud.');
     }
+    ultimoIdEjecucion = typeof response.id_ejecucion === 'string' ? response.id_ejecucion : null;
     vehicleState = { ...vehicleState, conectado: response.conectado };
     if (response.entregado === false) {
       ui.toast('Comando registrado, pero no entregado: no hay dispositivo conectado.', 'error');
@@ -150,6 +202,10 @@ async function handleCommandExecution(command, { button = null, isStop = false }
     return true;
   } catch (error) {
     if (button) ui.markButton(button, 'error');
+    if (origen === 'RENOVACION_MANUAL' && error instanceof ApiError
+        && [401, 403, 404, 409, 422].includes(error.status)) {
+      rechazoRenovacion = true;
+    }
     if (!(error instanceof ApiError && error.cause?.name === 'AbortError')) ui.toast(error.message || 'No se pudo enviar el comando.', 'error');
     return false;
   } finally {
@@ -158,18 +214,33 @@ async function handleCommandExecution(command, { button = null, isStop = false }
     setBusy(false);
     const next = pendingCommand;
     pendingCommand = null;
-    if (next && !isStop) window.queueMicrotask(() => handleCommandExecution(next.command, { button: next.button }));
+    if (next && !next.isStop) {
+      window.queueMicrotask(async () => {
+        const resultado = await handleCommandExecution(next.command, {
+          button: next.button, origen: next.origen, id_ejecucion: next.id_ejecucion, isStop: next.isStop,
+        });
+        next.resolve?.(resultado);
+      });
+    } else {
+      next?.resolve?.(false);
+    }
   }
 }
 
-async function stopVehicle() {
+async function stopVehicle({ forzar = false } = {}) {
   cancelActionPulse();
   detenerRenovacionManual();
   ui.clearDemoMovement();
   for (const joystick of ['left', 'right']) {
     joystickState[joystick].direction = 'neutral';
+    joystickState[joystick].liberado = true;
     resetJoystickVisual(joystick);
   }
+  const trabajo = movimientosJoystick.size > 0;
+  movimientosJoystick.clear();
+  // No generar DETENER redundante: solo si hubo interacción, ejecución del
+  // backend o se trata del botón explícito de parada.
+  if (!forzar && !trabajo && !ejecucionBackendActiva && !demoExecuting) return false;
   return handleCommandExecution(getStopCommand(commandIndex), { isStop: true });
 }
 
@@ -211,6 +282,7 @@ async function runSelectedDemo() {
   }
 
   demoExecuting = true;
+  ejecucionBackendActiva = true;
   const selectedOption = ui.demoSelect?.selectedOptions?.[0];
   const demoLabel = safeText(selectedOption?.textContent, `DEMO #${payload.id_demo}`);
   ui.setDemoExecuting(true, `Ejecutando ${demoLabel}`);
@@ -229,6 +301,7 @@ async function runSelectedDemo() {
     ui.toast(error?.message || 'No se pudo ejecutar la DEMO.', 'error');
   } finally {
     demoExecuting = false;
+    ejecucionBackendActiva = false;
     ui.setDemoExecuting(false, 'La DEMO terminó o no pudo ejecutarse.');
   }
 }
@@ -243,6 +316,7 @@ async function runSelectedMovimiento() {
     ui.toast('Selecciona un movimiento antes de ejecutarlo.', 'error');
     return;
   }
+  ejecucionBackendActiva = true;
   try {
     const response = await api.executeMovimiento(movimientoId);
     ui.toast(
@@ -252,6 +326,8 @@ async function runSelectedMovimiento() {
     );
   } catch (error) {
     ui.toast(error?.message || 'No se pudo ejecutar el movimiento.', 'error');
+  } finally {
+    ejecucionBackendActiva = false;
   }
 }
 
@@ -261,15 +337,24 @@ async function applyJoystickDirection(joystick, direction) {
   if (state.direction === direction) return;
   state.direction = direction;
   setJoystickReadout(joystick, direction);
-  if (direction === 'neutral') return;
+  if (direction === 'neutral') {
+    movimientosJoystick.delete(joystick);
+    detenerRenovacionManual();
+    return;
+  }
   const command = commandForJoystickDirection(commandIndex, joystick, direction);
   if (!command) {
     ui.toast(`No existe un comando de ${joystick === 'left' ? 'movimiento' : 'pala'} para ${joystickLabel(direction)} en el catálogo remoto.`, 'error');
     return;
   }
   const aceptado = await handleCommandExecution(command);
-  if (aceptado && direction !== 'neutral') iniciarRenovacionManual(command);
-  else detenerRenovacionManual();
+  if (aceptado && deviceConnected) {
+    movimientosJoystick.add(joystick);
+    iniciarRenovacionManual(command);
+  } else {
+    movimientosJoystick.delete(joystick);
+    detenerRenovacionManual();
+  }
 }
 
 function directionFromPointer(element, event) {
@@ -299,12 +384,17 @@ function updateJoystickFromPointer(joystick, event) {
 function releaseJoystick(joystick, pointerId = null) {
   const state = joystickState[joystick];
   if (pointerId !== null && state.pointerId !== pointerId) return;
+  if (state.liberado) return;
+  state.liberado = true;
   const element = joystick === 'left' ? ui.leftJoystick : ui.rightJoystick;
   const capturedPointer = state.pointerId;
   state.pointerId = null;
   if (capturedPointer !== null && element?.hasPointerCapture?.(capturedPointer)) element.releasePointerCapture(capturedPointer);
   resetJoystickVisual(joystick);
-  stopVehicle();
+  detenerRenovacionManual();
+  // Solo se envía DETENER si este joystick inició realmente una acción.
+  if (movimientosJoystick.has(joystick)) void stopVehicle();
+  else movimientosJoystick.delete(joystick);
 }
 
 function setupPointerJoystick(joystick) {
@@ -315,6 +405,7 @@ function setupPointerJoystick(joystick) {
     if (state.pointerId !== null) return;
     event.preventDefault();
     state.pointerId = event.pointerId;
+    state.liberado = false;
     element.setPointerCapture?.(event.pointerId);
     updateJoystickFromPointer(joystick, event);
   });
@@ -329,7 +420,7 @@ function setupPointerJoystick(joystick) {
 function setupControls() {
   setupPointerJoystick('left');
   setupPointerJoystick('right');
-  ui.stopButton?.addEventListener('click', () => stopVehicle());
+  ui.stopButton?.addEventListener('click', () => { void stopVehicle({ forzar: true }); });
   ui.demoSelect?.addEventListener('change', () => ui.setDemoSelectionReady(Boolean(ui.demoSelect.value)));
   ui.runDemoButton?.addEventListener('click', () => { void runSelectedDemo(); });
   ui.movimientoSelect?.addEventListener('change', () => ui.setMovimientoSelectionReady(Boolean(ui.movimientoSelect.value)));
@@ -337,8 +428,16 @@ function setupControls() {
   Object.entries(ui.actionButtons).forEach(([action, button]) => {
     button?.addEventListener('click', () => { void handleCenterActionClick(action); });
   });
-  window.addEventListener('blur', () => stopVehicle());
-  document.addEventListener('visibilitychange', () => { if (document.hidden) stopVehicle(); });
+  window.addEventListener('blur', () => {
+    detenerRenovacionManual();
+    if (hayTrabajoQueCancelar()) void stopVehicle();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      detenerRenovacionManual();
+      if (hayTrabajoQueCancelar()) void stopVehicle();
+    }
+  });
 }
 
 async function loadVehicleData(vehicleId = selectedVehicleId) {

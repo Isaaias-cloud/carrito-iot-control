@@ -100,7 +100,9 @@ export class MonitoringUI {
       date.textContent = dateParts.date;
       const time = document.createElement('td');
       time.textContent = dateParts.time;
-      row.append(number, command, date, time);
+      const entrega = document.createElement('td');
+      entrega.textContent = record.estadoEntrega ?? 'Desconocida (registro histórico)';
+      row.append(number, command, date, time, entrega);
       return row;
     });
     this.historyBody.replaceChildren(...rows);

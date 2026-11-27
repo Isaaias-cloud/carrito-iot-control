@@ -279,6 +279,7 @@ export class ControlUI {
       safeText(event.event, 'evento'),
       event.id_comando === undefined ? null : `cmd #${safeText(event.id_comando)}`,
       event.origen ? safeText(event.origen) : null,
+      event.estado_entrega ? safeText(event.estado_entrega) : null,
       event.timestamp ? formatDate(event.timestamp) : null,
     ].filter(Boolean);
     this.eventContent.textContent = parts.join(' · ');

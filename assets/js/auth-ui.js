@@ -95,7 +95,13 @@ export class AuthUI {
     document.querySelectorAll('[data-role="ADMIN"]').forEach((element) => {
       element.hidden = !roles.includes('ADMIN');
     });
-    document.querySelectorAll('[data-auth-only]').forEach((element) => { element.hidden = false; });
+    document.querySelectorAll('[data-auth-only]').forEach((element) => {
+      if (element.hasAttribute('data-guest-only')) {
+        element.hidden = !roles.includes('INVITADO');
+      } else {
+        element.hidden = false;
+      }
+    });
   }
 
   open() {

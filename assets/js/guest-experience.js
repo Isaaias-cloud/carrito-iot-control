@@ -70,7 +70,10 @@ export class GuestExperience {
   }
 
   updateTimer() {
-    const expiry = this.sessionData?.expira_en || this.session.tokens?.expira_en;
+    let expiry = this.sessionData?.expira_en || this.session.tokens?.expira_en;
+    // El backend serializa datetimes UTC sin sufijo: new Date() los tomaría
+    // como hora local y el contador saldría con horas de desfase.
+    if (typeof expiry === 'string' && !/(Z|[+-]\d{2}:\d{2})$/.test(expiry)) expiry += 'Z';
     const seconds = Math.max(0, Math.floor((new Date(expiry).getTime() - Date.now()) / 1000));
     if (this.timer) this.timer.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
     if (seconds <= 0) { this.setMessage('La sesión de exhibición terminó y la unidad fue liberada.', 'info'); void this.finish({ expired: true }); }

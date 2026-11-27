@@ -31,6 +31,8 @@ export function validateHistoryList(payload, vehicleId) {
       id_comando: item.id_comando ?? null,
       fecha_hora: item.fecha_hora,
       origen: typeof item.origen === 'string' ? item.origen : null,
+      // El esquema actual no persiste entrega/ACK: no se inventa un estado.
+      estadoEntrega: null,
     };
   });
 }

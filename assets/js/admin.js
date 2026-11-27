@@ -58,6 +58,7 @@ export class AdminController {
     this.dashboard = null;
     this.selectedUnitId = null;
     this.unitCommands = [];
+    this.modelCapabilities = new Map();
     this.selectedDemoId = null;
     this.demoSteps = [];
     this.editingModelId = null;
@@ -186,9 +187,10 @@ export class AdminController {
     const commandsBody = document.getElementById('admin-commands-body');
     const demosBody = document.getElementById('admin-demos-body');
     if (!unitId) {
-      emptyRow(commandsBody, 5, 'Selecciona una unidad para consultar comandos y demos.');
+      emptyRow(commandsBody, 7, 'Selecciona una unidad para consultar comandos y demos.');
       emptyRow(demosBody, 4, 'Selecciona una unidad para consultar demos.');
       this.unitCommands = [];
+      this.modelCapabilities = new Map();
       this.populateMovimientoCommandSelect();
       this.renderMovimientos([]);
       this.setMovimientoMessage('', 'info');
@@ -200,13 +202,23 @@ export class AdminController {
         this.api.getDemos(unitId),
       ]);
       this.unitCommands = arrayPayload(commands);
+      this.modelCapabilities = new Map();
+      const modeloId = Number(document.getElementById('admin-capability-model')?.value || 0);
+      if (modeloId) {
+        try {
+          const capacidades = arrayPayload(await this.api.getModelCommands(modeloId));
+          capacidades.forEach((capacidad) => {
+            this.modelCapabilities.set(Number(capacidad.id_comando), capacidad.permitido !== false);
+          });
+        } catch { /* el estado se muestra como "Según modelo" si no se puede consultar */ }
+      }
       this.renderCommands(this.unitCommands);
       this.renderDemos(arrayPayload(demos));
       this.populateMovimientoCommandSelect();
       await this.loadMovimientos();
     } catch (error) {
       this.setMessage(this.errorMessage(error), 'error');
-      emptyRow(commandsBody, 5, 'No fue posible consultar los comandos de esta unidad.');
+      emptyRow(commandsBody, 7, 'No fue posible consultar los comandos de esta unidad.');
       emptyRow(demosBody, 4, 'No fue posible consultar las demos de esta unidad.');
     }
   }
@@ -218,7 +230,12 @@ export class AdminController {
       return;
     }
     try {
-      this.renderModelCommands(arrayPayload(await this.api.getModelCommands(modelId)));
+      const capacidades = arrayPayload(await this.api.getModelCommands(modelId));
+      capacidades.forEach((capacidad) => {
+        this.modelCapabilities.set(Number(capacidad.id_comando), capacidad.permitido !== false);
+      });
+      this.renderModelCommands(capacidades);
+      this.renderCommands(this.unitCommands);
     } catch (error) {
       this.setMessage(this.errorMessage(error), 'error');
       emptyRow(body, 3, 'No fue posible consultar las capacidades del modelo.');
@@ -422,13 +439,27 @@ export class AdminController {
     const body = document.getElementById('admin-commands-body');
     if (!body) return;
     body.replaceChildren();
-    if (!commands.length) return emptyRow(body, 5, 'No hay comandos permitidos para esta unidad.');
+    if (!commands.length) return emptyRow(body, 7, 'No hay comandos permitidos para esta unidad.');
     commands.forEach((command) => {
+      const codigo = Number(command.codigo);
+      const protegido = Number.isInteger(codigo) && codigo >= 0 && codigo <= 13;
+      const permitido = this.modelCapabilities.has(Number(command.id_comando))
+        ? this.modelCapabilities.get(Number(command.id_comando))
+        : null;
       const row = document.createElement('tr');
-      cell(row, command.id_comando); cell(row, command.codigo); cell(row, command.nombre); cell(row, command.descripcion); cell(row, command.activo === false ? 'Inactivo' : 'Activo');
+      cell(row, command.id_comando); cell(row, codigo); cell(row, command.nombre); cell(row, command.descripcion);
+      cell(row, command.activo === false ? 'Inactivo' : 'Activo');
+      cell(row, permitido === null ? 'Según modelo' : (permitido ? 'Permitido' : 'Bloqueado'));
       const actionCell = cell(row, '');
-      const button = document.createElement('button'); button.className = 'btn btn-sm btn-outline-danger'; button.type = 'button'; button.textContent = 'Eliminar';
-      button.addEventListener('click', () => { void this.deleteCommand(command.id_comando); }); actionCell.replaceChildren(button); body.append(row);
+      if (codigo === 7) {
+        actionCell.textContent = 'Reservado · no ejecutable';
+      } else if (protegido) {
+        actionCell.textContent = 'Protegido';
+      } else {
+        const button = document.createElement('button'); button.className = 'btn btn-sm btn-outline-danger'; button.type = 'button'; button.textContent = 'Eliminar';
+        button.addEventListener('click', () => { void this.deleteCommand(command.id_comando); }); actionCell.replaceChildren(button);
+      }
+      body.append(row);
     });
   }
 
@@ -707,7 +738,13 @@ export class AdminController {
       const action = cell(row, '');
       const label = document.createElement('label'); label.className = 'admin-check-label';
       const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = command.permitido !== false; checkbox.setAttribute('aria-label', `Permitir ${command.nombre}`);
-      checkbox.addEventListener('change', () => { void this.updateModelCommand(command.id_modelo, command.id_comando, checkbox.checked, checkbox); });
+      if (Number(command.codigo) === 7) {
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        checkbox.setAttribute('title', 'Código 7 reservado: no puede habilitarse');
+      } else {
+        checkbox.addEventListener('change', () => { void this.updateModelCommand(command.id_modelo, command.id_comando, checkbox.checked, checkbox); });
+      }
       label.append(checkbox, document.createTextNode(checkbox.checked ? ' Permitido' : ' Bloqueado'));
       action.replaceChildren(label); body.append(row);
     });
