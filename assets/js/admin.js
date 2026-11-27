@@ -507,11 +507,14 @@ export class AdminController {
         boton.addEventListener('click', () => { void accion(); });
         return boton;
       };
-      acciones.append(
+      const grupoAcciones = document.createElement('div');
+      grupoAcciones.className = 'demo-actions';
+      grupoAcciones.append(
         crearBoton('Pasos', () => this.showDemoSteps(demo)),
         crearBoton('Ejecutar', () => this.executeDemo(demo), 'btn-outline-primary'),
         crearBoton('Eliminar', () => this.deleteDemo(demo), 'btn-outline-danger'),
       );
+      acciones.append(grupoAcciones);
       row.append(acciones);
       body.append(row);
     });
@@ -556,6 +559,13 @@ export class AdminController {
       this.demoSteps = [];
       this.setDemoMessage(formatError(error), 'error');
     }
+    this.demoSteps.sort((a, b) => Number(a.orden) - Number(b.orden));
+    // Sugerencia editable: siguiente orden libre tras el último paso visible.
+    const siguiente = this.demoSteps.reduce(
+      (max, paso) => Math.max(max, Number(paso.orden) || 0), 0
+    ) + 1;
+    const campoOrden = document.getElementById('admin-demo-step-orden');
+    if (campoOrden) campoOrden.value = String(Math.min(siguiente, 100));
     body.replaceChildren();
     if (!this.demoSteps.length) return emptyRow(body, 7, 'Esta demo no tiene pasos todavía.');
     this.demoSteps.forEach((paso) => {

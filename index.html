@@ -87,15 +87,18 @@
           </form>
           <div class="owner-demos-list" id="owner-demos-list"></div>
           <section class="owner-demo-editor" id="owner-demo-editor" hidden aria-labelledby="owner-demo-title">
-            <div class="owner-panel-heading"><h3 id="owner-demo-title">Pasos</h3><div><button class="btn btn-sm btn-success" id="owner-demo-run" type="button">Ejecutar</button><button class="btn btn-sm btn-outline-danger" id="owner-demo-delete" type="button">Eliminar</button></div></div>
-            <form class="owner-step-form" id="owner-step-form">
-              <label>Orden<input name="orden" type="number" min="1" max="100" value="1" required /></label>
-              <label>Comando<select name="id_comando" required><option value="">Selecciona comando</option></select></label>
-              <label>Duración ms<input name="duracion_ms" type="number" min="0" max="300000" value="500" required /></label>
-              <label>Pausa ms<input name="pausa_ms" type="number" min="0" max="300000" value="0" required /></label>
-              <button class="btn btn-outline-info" type="submit">Agregar paso</button>
-            </form>
+            <div class="owner-panel-heading"><h3 id="owner-demo-title">Pasos</h3><div class="demo-actions"><button class="btn btn-sm btn-success" id="owner-demo-run" type="button">Ejecutar</button><button class="btn btn-sm btn-outline-danger" id="owner-demo-delete" type="button">Eliminar</button></div></div>
             <div class="owner-steps" id="owner-demo-steps"></div>
+            <section class="owner-add-step" aria-labelledby="owner-add-step-heading">
+              <h4 class="add-step-heading" id="owner-add-step-heading">Agregar nuevo paso</h4>
+              <form class="owner-step-form" id="owner-step-form">
+                <label>Orden<input name="orden" type="number" min="1" max="100" value="1" required /></label>
+                <label>Comando<select name="id_comando" required><option value="">Selecciona comando</option></select></label>
+                <label>Duración ms<input name="duracion_ms" type="number" min="0" max="300000" value="500" required /></label>
+                <label>Pausa ms<input name="pausa_ms" type="number" min="0" max="300000" value="0" required /></label>
+                <button class="btn btn-outline-info owner-step-submit" type="submit">Agregar paso</button>
+              </form>
+            </section>
           </section>
         </section>
       </details>
@@ -356,14 +359,17 @@
             <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Demos empresariales</caption><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="admin-demos-body"></tbody></table></div>
             <div id="admin-demo-steps-panel" hidden>
               <h5 id="admin-demo-steps-title">Pasos de la demo</h5>
-              <form class="admin-form-grid" id="admin-demo-step-form">
-                <label>Comando<select id="admin-demo-step-comando" name="id_comando" aria-label="Comando del paso" required><option value="">Selecciona comando</option></select></label>
-                <label>Orden<input id="admin-demo-step-orden" name="orden" type="number" min="1" max="100" value="1" required></label>
-                <label>Duración ms<input id="admin-demo-step-duracion" name="duracion_ms" type="number" min="0" max="300000" value="200" required></label>
-                <label>Pausa ms<input id="admin-demo-step-pausa" name="pausa_ms" type="number" min="0" max="300000" value="0" required></label>
-                <button class="btn btn-primary" id="admin-demo-step-submit" type="submit">Agregar paso</button>
-              </form>
               <div class="admin-table-wrap"><table class="admin-table"><caption class="visually-hidden">Pasos de la demo</caption><thead><tr><th>ID</th><th>Orden</th><th>Comando</th><th>Código</th><th>Duración</th><th>Pausa</th><th>Acción</th></tr></thead><tbody id="admin-demo-steps-body"></tbody></table></div>
+              <section class="admin-add-step" aria-labelledby="admin-add-step-heading">
+                <h6 class="add-step-heading" id="admin-add-step-heading">Agregar nuevo paso</h6>
+                <form class="admin-form-grid" id="admin-demo-step-form">
+                  <label>Comando<select id="admin-demo-step-comando" name="id_comando" aria-label="Comando del paso" required><option value="">Selecciona comando</option></select></label>
+                  <label>Orden<input id="admin-demo-step-orden" name="orden" type="number" min="1" max="100" value="1" required></label>
+                  <label>Duración ms<input id="admin-demo-step-duracion" name="duracion_ms" type="number" min="0" max="300000" value="200" required></label>
+                  <label>Pausa ms<input id="admin-demo-step-pausa" name="pausa_ms" type="number" min="0" max="300000" value="0" required></label>
+                  <button class="btn btn-primary admin-form-wide" id="admin-demo-step-submit" type="submit">Agregar paso</button>
+                </form>
+              </section>
             </div>
           </div>
         </section>

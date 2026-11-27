@@ -242,14 +242,19 @@ export class OwnerExperience {
 
   renderSteps(steps) {
     const list = document.getElementById('owner-demo-steps'); if (!list) return;
+    const ordenados = [...steps].sort((a, b) => Number(a.orden) - Number(b.orden));
     list.replaceChildren();
-    if (!steps.length) { const empty = document.createElement('p'); empty.className = 'owner-empty'; empty.textContent = 'Agrega el primer paso de la secuencia.'; list.append(empty); return; }
-    steps.forEach((step) => {
+    if (!ordenados.length) { const empty = document.createElement('p'); empty.className = 'owner-empty'; empty.textContent = 'Agrega el primer paso de la secuencia.'; list.append(empty); }
+    ordenados.forEach((step) => {
       const form = document.createElement('form'); form.className = 'owner-step-row';
       form.innerHTML = '<label>Orden<input name="orden" type="number" min="1" max="100" required></label><label>Comando<select name="id_comando"></select></label><label>Duración ms<input name="duracion_ms" type="number" min="0" max="300000" required></label><label>Pausa ms<input name="pausa_ms" type="number" min="0" max="300000" required></label><button class="btn btn-sm btn-outline-info" type="submit">Guardar</button><button class="btn btn-sm btn-outline-danger" type="button">Eliminar</button>';
       form.elements.namedItem('orden').value = step.orden; form.elements.namedItem('duracion_ms').value = step.duracion_ms; form.elements.namedItem('pausa_ms').value = step.pausa_ms; this.populateCommandSelect(form.elements.namedItem('id_comando'), step.id_comando);
       form.addEventListener('submit', (event) => { event.preventDefault(); void this.updateStep(step.id_demo_movimiento, form); }); form.querySelector('button[type="button"]').addEventListener('click', () => { void this.deleteStep(step.id_demo_movimiento); }); list.append(form);
     });
+    // Sugerencia editable: siguiente orden libre tras el último paso visible.
+    const siguiente = ordenados.reduce((max, step) => Math.max(max, Number(step.orden) || 0), 0) + 1;
+    const campoOrden = document.getElementById('owner-step-form')?.elements.namedItem('orden');
+    if (campoOrden) campoOrden.value = String(Math.min(siguiente, 100));
   }
 
   async addStep(form) {
